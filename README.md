@@ -44,6 +44,36 @@ These are load-bearing; read them before changing the design.
 - **Untrusted code runs in a sandboxed iframe**, never in the host page, so a
   runaway effect or an infinite loop can be killed by replacing the frame.
 
+## Running it locally
+
+The playground does not work from a fresh clone alone: the compiler bundle is a
+build artifact, not source, and it is gitignored. Without it the editor loads and
+every compile fails with "No compiler bundle installed."
+
+```sh
+npm install                 # runtime deps (xote, rescript-signals, rescript)
+./scripts/build-bundle.sh   # produces dist/ — needs OCaml + opam, see below
+npm run setup               # installs app deps, vendors runtime modules, installs the bundle
+npm run dev
+```
+
+If you do not have an OCaml toolchain, download the `xote-playground-bundle`
+artifact from a CI run and point the installer at it instead of building:
+
+```sh
+npm run bundle:install -- path/to/unpacked-artifact
+```
+
+Two separate things have to line up, and it is worth keeping them straight:
+
+| | What it is | Where it goes | Produced by |
+|---|---|---|---|
+| **cmij set** | `.cmi`/`.cmj` artifacts the compiler *type-checks against* | `app/public/bundle/` | `build-bundle.sh` |
+| **vendor** | the `.mjs` the preview iframe *imports at runtime* | `app/public/vendor/` | `scripts/vendor.mjs` |
+
+Both must come from the same xote version, or a snippet will compile cleanly and
+then fail at runtime.
+
 ## Layout
 
 ```
@@ -52,6 +82,8 @@ bundle/
   xote.version            pinned xote version baked into the cmij set
 scripts/
   build-bundle.sh         builds compiler.js + cmij (needs OCaml + opam)
+  install-bundle.mjs      copies a built bundle into app/public/bundle/
+  vendor.mjs              copies runtime .mjs into app/public/vendor/
   verify-bundle.mjs       smoke-test: compile a xote snippet headlessly
 app/
   src/                    editor, compile worker, iframe runner

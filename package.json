@@ -1,0 +1,22 @@
+{
+  "name": "xote-playground",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "bundle:build": "./scripts/build-bundle.sh",
+    "bundle:install": "node scripts/install-bundle.mjs",
+    "bundle:verify": "node scripts/verify-bundle.mjs",
+    "vendor": "node scripts/vendor.mjs",
+    "setup": "npm --prefix app install && npm run vendor && npm run bundle:install",
+    "dev": "npm --prefix app run dev",
+    "build": "npm --prefix app run build",
+    "preview": "npm --prefix app run preview",
+    "test": "node app/src/runtime/rewrite.test.mjs"
+  },
+  "dependencies": {
+    "rescript": "12.3.1",
+    "rescript-signals": "^3.1.2",
+    "xote": "^0.0.0"
+  }
+}
