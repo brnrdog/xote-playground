@@ -97,6 +97,29 @@ Two separate things have to line up, and it is worth keeping them straight:
 Both must come from the same xote version, or a snippet will compile cleanly and
 then fail at runtime.
 
+## Hosting
+
+`.github/workflows/pages.yml` builds the bundle, verifies it, builds the app and
+publishes `app/build/` to GitHub Pages on every push to `main`. Enable Pages with
+"GitHub Actions" as the source; nothing else is needed.
+
+The site is **mount-point agnostic** — the same build runs from a project page
+subpath (`…github.io/xote-playground/`) or a domain root, with no rebuild:
+
+- `vite base` is `./`, so its own assets are relative.
+- The runner derives `vendor/` and `preview.css` from `document.baseURI`, and the
+  worker derives `bundle/` from its own URL.
+- `scripts/vendor.mjs` rewrites the vendored modules to import each other by
+  *relative* path, and the manifest stores paths relative to the vendor root.
+
+Two things this relies on, both true of Pages: it serves
+`access-control-allow-origin: *` (the preview iframe is sandboxed without
+`allow-same-origin`, so every module it fetches is cross-origin), and it serves
+the ~12 MB of bundle and vendor files as static assets.
+
+For a custom domain, set it in the repo's Pages settings and add a `CNAME` file
+to `app/public/` so the build keeps it.
+
 ## Layout
 
 ```

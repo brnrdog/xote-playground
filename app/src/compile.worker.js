@@ -8,7 +8,11 @@
  *   out { id, ok: true, js } | { id, ok: false, errors: [{ row, column, text }] }
  */
 
-const BUNDLE = '/bundle'
+// Resolved from this worker's own URL rather than hardcoded to /bundle, so the
+// app works wherever it is mounted -- a domain root, or a GitHub project page
+// subpath -- without a rebuild. Vite emits the worker one directory below the
+// app root in both dev (/src/) and build (/assets/), so '..' lands on the root.
+const BUNDLE = new URL('../bundle', self.location.href).href
 
 const JSX_CONFIG = '@@jsxConfig({version: 4, module_: "XoteJSX"})'
 

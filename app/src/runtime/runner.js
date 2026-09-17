@@ -27,11 +27,20 @@ const BOOTSTRAP = `
   }
 `
 
+// Where this app is mounted, resolved at runtime rather than baked in. Vite's
+// base only settles where *its* assets live; the preview iframe also has to
+// reach /vendor and /preview.css, and the same build is expected to work at a
+// domain root and under a GitHub project page subpath. document.baseURI is the
+// one value that knows which.
+const APP_BASE = new URL('./', document.baseURI)
+const VENDOR_BASE = new URL('vendor/', APP_BASE)
+const PREVIEW_CSS = new URL('preview.css', APP_BASE).href
+
 // The manifest is fetched once and cached: it changes only when `npm run
 // vendor` re-runs, never during a session.
 let manifestPromise = null
 function loadManifest() {
-  manifestPromise ??= fetch('/vendor/manifest.json')
+  manifestPromise ??= fetch(new URL('manifest.json', VENDOR_BASE))
     .then(res => (res.ok ? res.json() : {}))
     .catch(() => ({}))
   return manifestPromise
@@ -50,12 +59,12 @@ export function createRunner(container) {
     frame.setAttribute('sandbox', 'allow-scripts')
     frame.title = 'Preview'
 
-    const snippet = rewriteImports(js, location.origin, undefined, manifest)
-    const bootstrap = rewriteImports(BOOTSTRAP, location.origin, undefined, manifest)
+    const snippet = rewriteImports(js, VENDOR_BASE.href, manifest)
+    const bootstrap = rewriteImports(BOOTSTRAP, VENDOR_BASE.href, manifest)
 
     frame.srcdoc = `<!doctype html>
 <html>
-  <head><link rel="stylesheet" href="${location.origin}/preview.css" /></head>
+  <head><link rel="stylesheet" href="${PREVIEW_CSS}" /></head>
   <body>
     <div id="root"></div>
     <script type="module">

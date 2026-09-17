@@ -10,7 +10,6 @@ import { cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { createRequire } from 'node:module'
-import { rewriteImports } from '../app/src/runtime/rewrite.js'
 
 const require = createRequire(import.meta.url)
 const out = path.join(import.meta.dirname, '..', 'app', 'public', 'vendor')
@@ -43,16 +42,30 @@ for (const [pkg, subdirs] of COPIES) {
 // with "Failed to resolve module specifier". Rewrite them once here, at vendor
 // time, rather than on every run.
 //
-// Root-relative targets ('' origin) are deliberate: a module specifier resolves
-// against the importing module's own URL, so "/vendor/..." is correct both on
-// the dev server and wherever the built app is hosted -- and, unlike an
-// absolute URL, it does not bake in an origin.
+// They are rewritten to *relative* paths, not "/vendor/..." ones: a module
+// specifier resolves against the importing module's own URL, so a relative path
+// keeps working wherever the site is mounted -- at a domain root, or under a
+// subpath like a GitHub project page -- with no rebuild.
+const VENDORED = ['xote/', '@rescript/runtime/', 'rescript-signals/']
+const SPECIFIER = /(\bfrom\s*|\bimport\s*\(?\s*)(["'])([^"']+)\2/g
+
 let rewritten = 0
-for (const file of await readdir(out, { recursive: true, withFileTypes: true })) {
+const files = await readdir(out, { recursive: true, withFileTypes: true })
+
+for (const file of files) {
   if (!file.isFile() || !/\.m?js$/.test(file.name)) continue
   const full = path.join(file.parentPath ?? file.path, file.name)
   const src = await readFile(full, 'utf8')
-  const next = rewriteImports(src, '')
+
+  const next = src.replace(SPECIFIER, (match, keyword, quote, specifier) => {
+    if (!VENDORED.some(prefix => specifier.startsWith(prefix))) return match
+    let rel = path.relative(path.dirname(full), path.join(out, specifier))
+    rel = rel.split(path.sep).join('/')
+    // A bare "foo.js" would be read as a package name, not a sibling file.
+    if (!rel.startsWith('.')) rel = `./${rel}`
+    return `${keyword}${quote}${rel}${quote}`
+  })
+
   if (next !== src) {
     await writeFile(full, next)
     rewritten++
@@ -60,10 +73,9 @@ for (const file of await readdir(out, { recursive: true, withFileTypes: true }))
 }
 console.log(`rewrote bare specifiers in ${rewritten} vendored modules`)
 
-// Build the "./stdlib/<Module>.js" -> URL manifest the runner needs. The module
-// name the compiler emits is the namespaced one, so it has to match how each
-// package declares `namespace` in its rescript.json: `true` means "capitalised
-// package name", a string means itself, absent means no suffix.
+// Build the "./stdlib/<Module>.js" -> path manifest the runner needs. Paths are
+// relative to the vendor root, which the runner resolves against a base it
+// computes from the document -- again so the mount point does not matter.
 const manifest = {}
 
 function namespaceOf(pkgRoot, pkgName) {
@@ -89,9 +101,11 @@ for (const [pkg, subdirs] of COPIES) {
       if (!f.isFile()) continue
       const mod = f.name.replace(/\.res\.mjs$/, '').replace(/\.js$/, '')
       if (mod === f.name) continue
-      const url = '/' + path.relative(path.join(out, '..'), path.join(f.parentPath ?? f.path, f.name))
-        .split(path.sep).join('/')
-      manifest[ns ? `${mod}-${ns}` : mod] = url
+      const rel = path
+        .relative(out, path.join(f.parentPath ?? f.path, f.name))
+        .split(path.sep)
+        .join('/')
+      manifest[ns ? `${mod}-${ns}` : mod] = rel
     }
   }
 }

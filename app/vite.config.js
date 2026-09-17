@@ -1,7 +1,10 @@
 import { defineConfig } from 'vite'
 
 export default defineConfig({
-  base: '/',
+  // Relative asset URLs, so one build runs from any path: a custom domain root
+  // now, a project page subpath later, with no rebuild and no base to keep in
+  // sync with wherever it is actually deployed.
+  base: './',
   build: { outDir: 'build', target: 'es2022' },
   // The preview iframe is sandboxed WITHOUT allow-same-origin, so it has an
   // opaque origin and every fetch it makes to this server is cross-origin.

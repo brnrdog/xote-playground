@@ -1,0 +1,70 @@
+name: Deploy playground to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# The deploy is idempotent, but two overlapping runs would race to publish.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # The bundle is a build artifact, not source, so it has to be built here.
+      # These three are what build-bundle.sh needs beyond node: cargo because
+      # ReScript 12's CLI *is* rewatch, and opam/OCaml for the js_of_ocaml build
+      # of the compiler itself. See README ("Why a custom bundle").
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.91'
+
+      - uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: '5.3.0'
+
+      - name: Build compiler bundle
+        run: ./scripts/build-bundle.sh
+
+      # Fails the deploy rather than publishing a playground that cannot
+      # compile, or one whose @xote.component silently does nothing.
+      - name: Verify bundle
+        run: node scripts/verify-bundle.mjs
+
+      - name: Install app deps, vendor runtime, install bundle
+        run: npm run setup
+
+      - name: Test
+        run: npm test
+
+      - name: Build site
+        run: npm run build
+
+      - uses: actions/configure-pages@v5
+
+      # app/build/ already contains bundle/ and vendor/: Vite copies
+      # app/public/ verbatim.
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: app/build
+
+      - id: deploy
+        uses: actions/deploy-pages@v4
