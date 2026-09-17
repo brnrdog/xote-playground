@@ -58,7 +58,11 @@ jobs:
       - name: Build site
         run: npm run build
 
+      # enablement: turns Pages on for the repo if it is not already, so this
+      # needs no click in Settings before the first deploy.
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       # app/build/ already contains bundle/ and vendor/: Vite copies
       # app/public/ verbatim.
