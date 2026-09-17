@@ -3,47 +3,75 @@
  *
  * runner.js links this into the frame's srcdoc. It is served from public/
  * rather than imported, because the frame has an opaque origin and loads it as
- * a plain stylesheet URL, outside Vite's module graph.
- *
- * Theme tokens are duplicated from src/styles.css instead of shared: the frame
- * is a separate document and cannot inherit the host page's custom properties.
+ * a plain stylesheet URL, outside Vite's module graph — which is also why the
+ * tokens are imported from a sibling file here rather than shared through the
+ * app bundle, and why the webfonts have to be requested again: an opaque origin
+ * inherits nothing from the host page.
+ */
+@import './theme.css';
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500&family=DM+Mono:wght@400&display=swap');
+
+/*
+ * The frame is its own document, so it needs its own color-scheme: without it
+ * the root defaults to light and the UA paints the canvas behind a short body
+ * differently from the body itself — which shows up as two tones in one pane.
  */
 :root {
-  --pg-bg: #ffffff;
-  --pg-fg: #16181d;
-  --pg-muted: #6b7280;
-  --pg-border: #e5e7eb;
+  color-scheme: dark;
+  background: var(--bg);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --pg-bg: #0f1115;
-    --pg-fg: #e6e8eb;
-    --pg-muted: #9aa2ad;
-    --pg-border: #262b33;
-  }
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+/* Both, and full height: a snippet that renders one short line leaves the rest
+   of the frame to the canvas, and it has to match. */
+html,
+body {
+  min-height: 100%;
+  background: var(--bg);
 }
 
 body {
   margin: 0;
   padding: 16px;
-  background: var(--pg-bg);
-  color: var(--pg-fg);
-  font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--text);
+  font: 14px/var(--lh-ui) var(--font-body);
+  -webkit-font-smoothing: antialiased;
 }
 
 button {
   font: inherit;
-  color: var(--pg-fg);
-  background: var(--pg-bg);
-  border: 1px solid var(--pg-border);
-  border-radius: 6px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
   padding: 4px 12px;
   cursor: pointer;
+  transition: border-color 120ms ease, color 120ms ease;
 }
 
-button:hover { border-color: var(--pg-muted); }
+button:hover {
+  border-color: var(--text-faint);
+}
+
+button:focus-visible {
+  outline: 1px solid var(--syntax-warm);
+  outline-offset: 1px;
+}
 
 /* Classes used by the bundled snippets (see src/snippets.js). */
-.counter { display: flex; align-items: center; gap: 12px; }
-.counter .value { min-width: 3ch; text-align: center; font-variant-numeric: tabular-nums; font-size: 18px; }
+.counter {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.counter .value {
+  min-width: 3ch;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 18px;
+  color: var(--syntax-warm);
+}

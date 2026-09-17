@@ -50,6 +50,11 @@ jobs:
       - name: Verify bundle compiles a xote snippet
         run: node scripts/verify-bundle.mjs
 
+      # The snippets are the playground's documentation and they are compiled
+      # against the bundle that was just built, so a broken example cannot ship.
+      - name: Verify snippets compile
+        run: npm run test:snippets
+
       # always(): a bundle that builds but fails verification is still the
       # artifact we want in hand — the previous run threw one away.
       - if: always() && hashFiles('dist/compiler.js') != ''

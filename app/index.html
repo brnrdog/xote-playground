@@ -1,26 +1,88 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>xote playground</title>
+
+    <!-- Set the theme before first paint: reading it in main.js would flash the
+         default dark against a stored light preference. -->
+    <script>
+      try {
+        var t = localStorage.getItem('xote-theme')
+        if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t
+      } catch (e) {}
+    </script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Domine:wght@400;600&family=DM+Sans:opsz,wght@9..40,400;9..40,500&family=DM+Mono:wght@400;500&display=swap"
+    />
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
+
   <body>
-    <main id="app">
-      <header class="pg-header">
-        <span class="pg-title">xote playground</span>
-        <span class="pg-status" id="status">loading compiler…</span>
-        <button id="share" type="button">Copy link</button>
+    <main id="app" class="flex h-dvh flex-col bg-bg text-fg">
+      <header
+        class="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-line-soft px-3 py-2 sm:gap-x-4 sm:px-4 sm:py-2.5"
+      >
+        <span class="font-display text-[18px] leading-none font-semibold tracking-tight">
+          xote
+        </span>
+        <span class="hidden font-mono text-[11px] text-faint sm:inline">playground</span>
+
+        <label class="ml-2 flex items-center gap-2">
+          <span class="sr-only">Example</span>
+          <select
+            id="examples"
+            class="max-w-[9rem] cursor-pointer truncate border border-line bg-surface px-2 py-1 font-mono text-[12px] text-muted transition-colors hover:border-faint hover:text-fg focus:border-faint focus:outline-none sm:max-w-none"
+          ></select>
+        </label>
+
+        <span
+          id="status"
+          class="ml-auto truncate font-mono text-[12px] text-muted"
+          role="status"
+          aria-live="polite"
+        >
+          loading compiler…
+        </span>
+
+        <button
+          id="theme"
+          type="button"
+          class="shrink-0 border border-line px-2 py-1 font-mono text-[12px] text-muted transition-colors hover:border-faint hover:text-fg focus-visible:border-faint focus-visible:outline-none"
+          aria-label="Toggle colour theme"
+        ></button>
+
+        <button
+          id="share"
+          type="button"
+          class="shrink-0 border border-line px-2 py-1 font-mono text-[12px] text-muted transition-colors hover:border-faint hover:text-fg focus-visible:border-faint focus-visible:outline-none sm:px-3"
+        >
+          <span class="sm:hidden">Link</span>
+          <span class="hidden sm:inline">Copy link</span>
+        </button>
       </header>
-      <div class="pg-split">
-        <section class="pg-editor" id="editor"></section>
-        <section class="pg-output">
-          <iframe id="preview" sandbox="allow-scripts" title="Preview"></iframe>
-          <pre class="pg-errors" id="errors" hidden></pre>
-        </section>
+
+      <div id="split" class="flex min-h-0 flex-1 max-md:flex-col">
+        <section id="editor" class="min-h-0 min-w-0 overflow-hidden"></section>
+
+        <div
+          id="split-handle"
+          class="shrink-0 cursor-col-resize bg-line-soft transition-colors hover:bg-faint w-[3px] max-md:h-[3px] max-md:w-full max-md:cursor-row-resize"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize editor and output"
+          tabindex="0"
+        ></div>
+
+        <section id="output" class="flex min-h-0 min-w-0 flex-1 flex-col"></section>
       </div>
     </main>
+
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

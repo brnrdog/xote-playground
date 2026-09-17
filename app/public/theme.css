@@ -1,0 +1,84 @@
+/**
+ * Design tokens, transcribed from xote.dev.
+ *
+ * This file is the single source of truth for the playground's palette, and it
+ * is consumed by three separate styling surfaces:
+ *
+ *   1. the host page  — styles.css maps these into Tailwind via `@theme inline`
+ *   2. the preview    — public/preview.css imports this file directly, because
+ *                       the preview iframe is a separate document with an
+ *                       opaque origin and inherits nothing from the host
+ *   3. the editor     — the CodeMirror theme reads them with var()
+ *
+ * Everything is a var() lookup, so flipping `data-theme` on <html> restyles all
+ * three at once with no JavaScript beyond setting the attribute.
+ *
+ * Dark is the default, matching xote.dev.
+ */
+
+:root {
+  --bg: #0a0a0a;
+  --surface: #111111;
+  --elevated: #171717;
+  --border: #242424;
+  --border-soft: #1a1a1a;
+
+  --text: #f5f5f4;
+  --text-muted: #a3a3a3;
+  --text-faint: #8a8a8a;
+  --mark: #fafaf7;
+
+  /* xote.dev's accent is an off-white, not a hue: emphasis comes from
+     contrast, and the warm tones are reserved for code. */
+  --accent: #f5f5f4;
+  --accent-fg: #0a0a0a;
+
+  --syntax-warm: #c9a268;
+  --syntax-warm-deep: #b88b4a;
+  --syntax-warm-soft: #9d8456;
+  --syntax-blue: #8da9d6;
+  --syntax-green: #8fbf8f;
+  --syntax-purple: #b99ad6;
+  --syntax-red: #d58f8f;
+
+  --ok: #8fbf8f;
+  --warn: #c9a268;
+  --error: #d58f8f;
+
+  --font-display: 'Domine', Georgia, serif;
+  --font-body: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'DM Mono', 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+
+  --lh-tight: 1.15;
+  --lh-ui: 1.45;
+  --lh-prose: 1.65;
+}
+
+[data-theme='light'] {
+  --bg: #fafaf7;
+  --surface: #ffffff;
+  --elevated: #f5f5f2;
+  --border: #e5e5e2;
+  --border-soft: #ededea;
+
+  --text: #1a1a18;
+  --text-muted: #5c5c58;
+  --text-faint: #8a8a85;
+  --mark: #0a0a0a;
+
+  --accent: #1a1a18;
+  --accent-fg: #fafaf7;
+
+  /* Darkened for contrast on a light ground; the dark values wash out. */
+  --syntax-warm: #8a6a2f;
+  --syntax-warm-deep: #6f5323;
+  --syntax-warm-soft: #7a6540;
+  --syntax-blue: #3f5f8f;
+  --syntax-green: #3f6f3f;
+  --syntax-purple: #6f4f8f;
+  --syntax-red: #9f3f3f;
+
+  --ok: #3f6f3f;
+  --warn: #8a6a2f;
+  --error: #9f3f3f;
+}

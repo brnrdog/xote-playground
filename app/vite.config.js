@@ -1,6 +1,8 @@
 import { defineConfig } from 'vite'
+import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
+  plugins: [tailwindcss()],
   // Relative asset URLs, so one build runs from any path: a custom domain root
   // now, a project page subpath later, with no rebuild and no base to keep in
   // sync with wherever it is actually deployed.
