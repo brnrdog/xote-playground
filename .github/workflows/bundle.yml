@@ -43,7 +43,10 @@ jobs:
       - name: Verify bundle compiles a xote snippet
         run: node scripts/verify-bundle.mjs
 
-      - uses: actions/upload-artifact@v4
+      # always(): a bundle that builds but fails verification is still the
+      # artifact we want in hand — the previous run threw one away.
+      - if: always() && hashFiles('dist/compiler.js') != ''
+        uses: actions/upload-artifact@v4
         with:
           name: xote-playground-bundle
           path: dist/

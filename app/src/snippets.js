@@ -7,32 +7,31 @@ export const DEFAULT_SNIPPET = `// A counter. Note the explicit thunks: the play
 
 let count = Signal.make(0)
 
+let button = (label, onClick) =>
+  View.element(
+    "button",
+    ~attrs=[View.attr("type", "button"), View.attr("class", "btn")],
+    ~events=[("click", onClick)],
+    ~children=[View.text(label)],
+    (),
+  )
+
 let make = () =>
   View.element(
     "div",
     ~attrs=[View.attr("class", "counter")],
-    [
-      View.element(
-        "button",
-        ~attrs=[
-          View.attr("type", "button"),
-          View.Attr.onClick(_ => Signal.update(count, n => n - 1)),
-        ],
-        [View.text("-")],
-      ),
+    ~children=[
+      button("-", _ => Signal.update(count, n => n - 1)),
       View.element(
         "span",
         ~attrs=[View.attr("class", "value")],
-        [View.signalText(count, Int.toString)],
+        // signalInt takes a thunk; every signal read inside it subscribes
+        // this text node and nothing else.
+        ~children=[View.signalInt(() => Signal.get(count))],
+        (),
       ),
-      View.element(
-        "button",
-        ~attrs=[
-          View.attr("type", "button"),
-          View.Attr.onClick(_ => Signal.update(count, n => n + 1)),
-        ],
-        [View.text("+")],
-      ),
+      button("+", _ => Signal.update(count, n => n + 1)),
     ],
+    (),
   )
 `

@@ -13,10 +13,27 @@ Practically, write the reactive parts by hand:
 
 | With the PPX (docs-website)      | In the playground                          |
 |----------------------------------|--------------------------------------------|
-| `{Signal.get(count)}` as a child | `View.signalText(count, Int.toString)`     |
-| `class={"x " ++ Signal.get(s)}`  | `View.signalAttr("class", s, v => "x " ++ v)` |
+| `{Signal.get(count)}` as a child | `View.signalText(() => ...)` — takes a **thunk** |
 | bare `{"text"}` child            | `View.text("text")`                         |
-| `<View.Int>` via bare child      | `View.signalInt(count)`                     |
+| `<View.Int>` via bare child      | `View.signalInt(() => Signal.get(count))`   |
+| `class={"x " ++ Signal.get(s)}`  | `View.Attr.compute("class", () => "x " ++ Signal.get(s))` |
+| `onClick={handler}`              | `~events=[("click", handler)]`              |
+
+### `View.element` is fully labelled and ends in `unit`
+
+```rescript
+View.element(
+  "div",
+  ~attrs=[View.attr("class", "counter")],
+  ~events=[("click", handler)],
+  ~children=[View.text("hi")],
+  (),
+)
+```
+
+Children are `~children`, not positional — passing the array positionally
+type-errors against the trailing `unit`. And `View.mount` is `(node, element)`,
+node first.
 
 ## JSX needs a file-level attribute
 

@@ -11,13 +11,17 @@ import vm from 'node:vm'
 const dist = path.join(import.meta.dirname, '..', 'dist')
 
 const SNIPPET = `
+@@jsxConfig({version: 4, module_: "XoteJSX"})
+
 let count = Signal.make(0)
 
 let make = () =>
   View.element(
-    "button",
-    ~attrs=[View.attr("type", "button")],
-    [View.signalText(count, n => Int.toString(n))],
+    "div",
+    ~attrs=[View.attr("class", "counter")],
+    ~events=[("click", _ => Signal.update(count, n => n + 1))],
+    ~children=[View.signalInt(() => Signal.get(count))],
+    (),
   )
 `
 

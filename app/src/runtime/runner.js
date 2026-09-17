@@ -14,7 +14,8 @@ const BOOTSTRAP = `
 
   const root = document.getElementById("root")
   try {
-    View.mount(root, make())
+    // View.mount is (node, element) — node first. See src/View.resi.
+    View.mount(make(), root)
   } catch (err) {
     parent.postMessage({ type: "runtime-error", text: String(err?.stack ?? err) }, "*")
   }
