@@ -169,6 +169,119 @@ console.log('playground deps:', resConfig.dependencies.join(', '))
 NODE
 
 # ---------------------------------------------------------------------------
+# 2b. Link xote's @xote.component PPX into the playground compiler
+#
+# A ReScript ppx is an external binary the *build system* runs between parse and
+# compile, handed a marshalled parsetree. The playground compiler has no such
+# seam -- its entire API is compile(source) -> js -- so a ppx cannot be bolted
+# on from the JS side at runtime. Expanding @xote.component in the browser means
+# linking the rewriter into the compiler and calling it right after parsing.
+#
+# That is tractable only because xote's ppx is plain OCaml over a verbatim copy
+# of ReScript's ppx-facing parsetree (compiler/ml/parsetree0.ml): stdlib-only,
+# no ppxlib, no dune libraries to add.
+# ---------------------------------------------------------------------------
+PPX_SRC="${ROOT}/node_modules/xote/ppx"
+JSOO="${COMPILER}/compiler/jsoo"
+
+for f in ast.ml ppx.ml; do
+  if [ ! -f "${PPX_SRC}/${f}" ]; then
+    echo >&2 "==> xote ppx source missing: ${PPX_SRC}/${f}"
+    echo >&2 "    Run npm install first; the ppx ships in the xote package."
+    exit 1
+  fi
+done
+
+# Renamed on the way in: the compiler already defines Location, Asttypes and
+# Parsetree at top level, and dune's libraries here are unwrapped, so a module
+# literally called Ast would collide.
+python3 - "${PPX_SRC}" "${JSOO}" <<'PPXPY'
+import sys, pathlib
+src, dst = (pathlib.Path(p) for p in sys.argv[1:3])
+
+# Vendored AST: verbatim, only silenced. Its unused constructors are not ours
+# to fix, and the jsoo executable builds with -w +a.
+ast = (src / "ast.ml").read_text()
+(dst / "xote_ast.ml").write_text('[@@@warning "-a"]\n' + ast)
+
+ppx = (src / "ppx.ml").read_text()
+if "open Ast\n" not in ppx:
+    sys.exit("xote ppx: expected `open Ast` in ppx.ml; the ppx layout changed")
+ppx = ppx.replace("open Ast\n", "open Xote_ast\n", 1)
+
+# ppx.ml ends in a `let () =` entry point that reads Sys.argv and exits. Linked
+# into the compiler that would run at module-initialisation time and kill it,
+# so keep only the rewriter above it.
+cut = ppx.rfind("\nlet () =")
+if cut < 0:
+    sys.exit("xote ppx: no `let () =` entry point found; the ppx layout changed")
+(dst / "xote_ppx.ml").write_text('[@@@warning "-a"]\n' + ppx[:cut] + "\n")
+PPXPY
+
+# The bridge. xote's vendored parsetree and the compiler's Parsetree0 are
+# structurally identical -- same constructors, same declaration order, so the
+# same runtime representation -- which is what lets Obj.magic stand in for the
+# Marshal round-trip the external ppx protocol would otherwise do. The ppx
+# itself already relies on exactly this when it reads its input payload.
+cat > "${JSOO}/xote_ppx_entry.ml" <<'ENTRY'
+[@@@warning "-a"]
+
+(* Applies xote's @xote.component rewriter to a freshly parsed structure.
+
+   Ast_mapper_to0/from0 are the compiler's own converters between its internal
+   Parsetree and the 4.06 Parsetree0 it hands to external ppxes; going through
+   them means this sees exactly the AST a native `ppx <in> <out>` invocation
+   would, rather than a second, subtly different encoding. *)
+let transform ~filename (impl : Parsetree.structure) : Parsetree.structure =
+  let to0 = Ast_mapper_to0.default_mapper in
+  let from0 = Ast_mapper_from0.default_mapper in
+  let s0 : Parsetree0.structure = to0.structure to0 impl in
+  let xs : Xote_ast.Parsetree.structure = Obj.magic s0 in
+  Xote_ppx.source_file := Filename.basename filename;
+  Xote_ppx.fine_grain_helpers := Xote_ppx.structure_has_component xs;
+  let xs' = Xote_ppx.map_structure Xote_ppx.empty_env xs in
+  let s0' : Parsetree0.structure = Obj.magic xs' in
+  from0.structure from0 s0'
+ENTRY
+
+# Call it where a ppx actually belongs: on the parsed structure, and *before*
+# Ppx_entry.rewrite_implementation. Order matters -- Ppx_entry is ReScript's
+# internal rewriter, and it is what lowers JSX. Natively an external ppx sees
+# the AST before that happens, so @xote.component must get its hands on the JSX
+# first; running it afterwards would hand it already-lowered calls it does not
+# recognise.
+#
+# Note `let impl = rescript_parse ~filename in` a few lines above is NOT the
+# seam: rescript_parse takes ~filename *and* src, so that binds a partially
+# applied parser, not a structure.
+python3 - "${COMPILER}/compiler/jsoo/jsoo_playground_main.ml" <<'HOOKPY'
+import sys, pathlib
+p = pathlib.Path(sys.argv[1])
+s = p.read_text()
+if "Xote_ppx_entry" in s:
+    sys.exit(0)
+needle = "      let ast = Ppx_entry.rewrite_implementation ast in\n"
+if needle not in s:
+    sys.exit("jsoo_playground_main.ml: ppx seam not found; the compiler layout changed")
+s = s.replace(needle, "      let ast = Xote_ppx_entry.transform ~filename ast in\n" + needle, 1)
+p.write_text(s)
+HOOKPY
+
+# `make playground` runs a blanket `dune build --profile browser`, which builds
+# every target in the enabled stanzas -- including this one's wasm output, via
+# `(modes js wasm)`. Only compiler.js is ever shipped, and building the wasm
+# half would require wasm_of_ocaml/binaryen for an artifact nobody loads.
+python3 - "${JSOO}/dune" <<'DUNEPY'
+import sys, pathlib
+p = pathlib.Path(sys.argv[1]); s = p.read_text()
+if "(modes js wasm)" not in s:
+    sys.exit(0 if "(modes js)" in s else "jsoo/dune: expected `(modes js wasm)`; the stanza changed")
+p.write_text(s.replace("(modes js wasm)", "(modes js)", 1))
+DUNEPY
+
+echo "==> xote ppx linked into the playground compiler"
+
+# ---------------------------------------------------------------------------
 # 3. Install (Yarn 4, vendored in the checkout) and build
 # ---------------------------------------------------------------------------
 cd "${COMPILER}"
@@ -204,12 +317,20 @@ echo "==> yarn $(yarn --version) (vendored)"
 
 yarn install --no-immutable   # --no-immutable: we just edited two manifests
 
-# --with-test is load-bearing, not a nicety: rescript.opam declares js_of_ocaml
-# (and wasm_of_ocaml-compiler) under `with-test`, so a plain --deps-only leaves
-# jsoo uninstalled and `make playground` dies with
+# rescript.opam declares js_of_ocaml under `with-test`, so a plain --deps-only
+# leaves jsoo uninstalled and `make playground` dies with
 #   Program js_of_ocaml not found in the tree or in PATH
+# But --with-test ALSO pulls wasm_of_ocaml-compiler, whose binaryen-bin builds a
+# large C++ tree and fails outright on a machine whose Command Line Tools are
+# stale (`fatal error: mutex file not found`). We do not need it: the playground
+# ships compiler.js, and step 2b drops the dune stanza's wasm target. So take
+# jsoo by name and leave the rest of with-test alone.
 # The opam file also pin-depends flow_parser on a git fork, which opam resolves
-# from the pin — so install from this directory, not by package name.
+# from the pin — so install from this directory, not by package name. That is
+# also why this cannot be probed with --dry-run: dry runs skip pin-depends.
+install_deps() {
+  opam install . --deps-only --yes && opam install js_of_ocaml-compiler --yes
+}
 # The active switch may be too old (rescript.opam needs ocaml >= 5.0.0) or have
 # a locked base, in which case installing into it fails with:
 #   - ocaml-compiler -> compiler-cloning < enabled
@@ -229,19 +350,26 @@ yarn install --no-immutable   # --no-immutable: we just edited two manifests
 active_ocaml="$(ocamlc -version 2>/dev/null || true)"
 
 use_local_switch=1
+deps_installed=0
 if [ "${XOTE_PLAYGROUND_LOCAL_SWITCH:-0}" = "1" ]; then
   echo "==> a local switch was explicitly requested (XOTE_PLAYGROUND_LOCAL_SWITCH=1)"
 elif [ -z "${active_ocaml}" ]; then
   echo "==> no active OCaml switch"
 else
-  echo "==> active switch has OCaml ${active_ocaml}; asking opam whether it can resolve the deps"
-  # Not `set -e`-fatal: a failure here is a legitimate answer, not a build error.
-  if probe="$(opam install . --deps-only --with-test --dry-run --yes 2>&1)"; then
+  # Just try it. An earlier version of this asked `--dry-run` first, which
+  # looks tidier and is wrong: --dry-run does not apply `pin-depends`, so the
+  # flow_parser git pin resolves to "no matching version" and the probe fails
+  # on *every* switch, however healthy -- forcing a needless local switch build
+  # each time. The real install is the only honest test, and it is safe to
+  # attempt: the failure this guards against (a locked base) happens at solve
+  # time, which installs nothing.
+  echo "==> active switch has OCaml ${active_ocaml}; trying the deps install there"
+  if install_deps; then
     echo "==> using the active switch (OCaml ${active_ocaml})"
     use_local_switch=0
+    deps_installed=1
   else
-    echo "==> the active switch cannot resolve the deps; falling back to a local switch"
-    echo "${probe}" | sed -n '/No solution found/,$p;/base of this switch/p' | sed 's/^/    | /'
+    echo "==> the active switch could not install the deps; falling back to a local switch"
   fi
 fi
 
@@ -255,7 +383,36 @@ if [ "${use_local_switch}" = "1" ]; then
   echo "==> local switch OCaml: $(ocamlc -version)"
 fi
 
-opam install . --deps-only --with-test --yes
+if [ "${deps_installed}" = "0" ]; then
+  install_deps
+fi
+
+# macOS: an old Command Line Tools install can leave a stale libc++ at
+# /Library/Developer/CommandLineTools/usr/include/c++/v1 that *shadows* the
+# current headers in the SDK. clang searches the stale one first and every C++
+# build then dies on a basic header:
+#   fatal error: 'cstdio' file not found     (ninja's bootstrap)
+#   fatal error: 'mutex' file not found      (binaryen, via wasm_of_ocaml)
+# The SDK copy is fine, so point at it explicitly rather than skipping the
+# build: ReScript vendors a *forked* ninja (its lexer accepts `o` as a synonym
+# for `build`), so a system ninja cannot stand in -- it rejects the generated
+# build.ninja with "expected '=', got identifier".
+#
+# The real fix is reinstalling the Command Line Tools; this only gets the build
+# through on a machine that has not.
+if [ "$(uname)" = "Darwin" ]; then
+  sdk_path="$(xcrun --show-sdk-path 2>/dev/null || true)"
+  clt_cxx="/Library/Developer/CommandLineTools/usr/include/c++/v1"
+  # __sso_allocator was removed from libc++ years ago; its presence marks the
+  # stale tree. Absent that, leave a healthy toolchain alone.
+  if [ -n "${sdk_path}" ] && [ -f "${clt_cxx}/__sso_allocator" ] &&
+     [ -d "${sdk_path}/usr/include/c++/v1" ]; then
+    export CXXFLAGS="-isystem ${sdk_path}/usr/include/c++/v1 ${CXXFLAGS:-}"
+    echo "==> stale Command Line Tools libc++ detected; using the SDK headers instead"
+    echo "    (consider reinstalling: sudo rm -rf /Library/Developer/CommandLineTools"
+    echo "     && sudo xcode-select --install)"
+  fi
+fi
 
 # `make playground` = playground-compiler (dune --profile browser, jsoo) plus
 # playground-cmijs (`yarn workspace playground build`, which runs

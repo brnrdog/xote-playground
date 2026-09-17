@@ -15,7 +15,13 @@ const BOOTSTRAP = `
   const root = document.getElementById("root")
   try {
     // View.mount is (node, element) — node first. See src/View.resi.
-    View.mount(make(), root)
+    //
+    // make({}) rather than make(): @xote.component derives props, so an
+    // annotated component compiles to a function taking a props object, while
+    // a plain one takes unit. An empty object satisfies the first and is
+    // ignored by the second, so one call site serves both.
+    // (No backticks in here: this whole string is a template literal.)
+    View.mount(make({}), root)
   } catch (err) {
     parent.postMessage({ type: "runtime-error", text: String(err?.stack ?? err) }, "*")
   }

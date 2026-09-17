@@ -31,11 +31,20 @@ rescript-lang.org builds theirs, with xote's artifacts added to the cmij set.
 
 These are load-bearing; read them before changing the design.
 
-- **`@xote.component` cannot run in the browser.** The PPX is a native OCaml
-  executable (`ppx/bin` in the xote repo). The playground compiler has no PPX
-  hook, so **playground snippets must be PPX-free**: explicit `() => ...` thunks,
-  `View.signalText`, `<View.Int>` and friends. Most examples in `docs-website/`
-  are PPX-style and will not paste in unchanged. See `docs/authoring-snippets.md`.
+- **`@xote.component` works, but only because the compiler is patched.** A
+  ReScript ppx is a binary the build system runs between parse and compile; the
+  playground compiler has no such seam (`compile(source) -> js` is the entire
+  API). So the rewriter is *linked into* the compiler and called on the parsed
+  structure, just before ReScript's own `Ppx_entry` lowers JSX. That is possible
+  only because xote's ppx is plain stdlib-only OCaml over a verbatim copy of
+  ReScript's frozen ppx parsetree (`compiler/ml/parsetree0.ml`). See
+  `scripts/build-bundle.sh` step 2b. **A stock bundle from
+  `cdn.rescript-lang.org` has no ppx** — it must be built from source.
+- **Sibling JSX children raise `Not_found`.** With a custom `jsx.module`, two or
+  more JSX children break the playground compiler. This is upstream — the stock
+  12.3.1 bundle fails identically, with or without the ppx — and the workaround
+  is one child holding an explicit `XoteJSX.array([...])`. See
+  `docs/authoring-snippets.md`.
 - **The bundle pins one xote version.** Every xote release that changes the public
   API needs a bundle rebuild. That is what `.github/workflows/bundle.yml` is for.
 - **Emitted code imports bare specifiers** (`rescript/lib/es6/...`,
@@ -58,7 +67,7 @@ Building the bundle needs a fuller toolchain than a JS project usually implies:
 | dune | installed by opam from `rescript.opam`; not a prerequisite |
 | node | the compiler repo is a Yarn 4 workspace, but vendors its own Yarn — corepack is *not* required |
 | **cargo (Rust >= 1.91)** | ReScript 12's `rescript` CLI *is* rewatch, a Rust binary, and the stdlib build depends on it |
-| python3 + a C++ compiler | bootstraps ninja |
+| python3 + a **working** C++ compiler | bootstraps ninja — ReScript vendors a *forked* ninja (its lexer accepts `o` as a synonym for `build`), so a system ninja cannot substitute |
 
 `scripts/build-bundle.sh` checks all of these up front and names what is
 missing, rather than failing minutes into the build.
@@ -106,10 +115,9 @@ docs/
 
 ## Status
 
-`scripts/build-bundle.sh` is written against the real v12.3.1 compiler tree
-(`packages/playground/`, `make playground`, `scripts/generate_cmijs.mjs`), not
-guessed. It has still **not been run end to end** — that first run is the real
-test.
+`scripts/build-bundle.sh` has been run end to end on macOS (Intel, opam 2.6.0,
+OCaml 5.3.0) and produces a bundle that compiles and expands `@xote.component`;
+`npm run bundle:verify` asserts exactly that.
 
 Notes from reading that tree, in case the build surprises you:
 
@@ -150,6 +158,18 @@ Notes from reading that tree, in case the build surprises you:
   compiler. Creating it compiles OCaml from source, so that build is slow; set
   `XOTE_PLAYGROUND_LOCAL_SWITCH=1` to force it even when the active switch
   would do.
+- **macOS: a stale Command Line Tools install breaks every C++ build.** An old
+  `/Library/Developer/CommandLineTools/usr/include/c++/v1` (recognisable by
+  `__sso_allocator`, removed from libc++ years ago) *shadows* the current headers
+  in the SDK, and clang searches it first. Ninja's bootstrap then dies on
+  `fatal error: 'cstdio' file not found`, and binaryen on `'mutex' file not
+  found`. `build-bundle.sh` detects this and points at the SDK headers instead;
+  the real fix is `sudo rm -rf /Library/Developer/CommandLineTools &&
+  sudo xcode-select --install`.
+- **`--with-test` is deliberately not used.** rescript.opam declares js_of_ocaml
+  under `with-test`, but so is `wasm_of_ocaml-compiler`, which drags in a large
+  binaryen C++ build for an artifact the playground never loads. jsoo is
+  installed by name instead, and step 2b drops the jsoo stanza's `wasm` target.
 - The checkout vendors Yarn 4 at `.yarn/releases/` (via `.yarnrc.yml`
   `yarnPath`) and it runs under plain `node`. The build shims that onto `PATH`
   instead of using corepack, which is not present on every Node install and is

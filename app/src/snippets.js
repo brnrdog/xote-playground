@@ -1,37 +1,31 @@
 /**
- * Starter snippets. All PPX-free — see docs/authoring-snippets.md for why
- * @xote.component cannot appear here.
+ * Starter snippets.
+ *
+ * @xote.component works here: the rewriter is linked into the playground
+ * compiler itself (scripts/build-bundle.sh step 2b), so snippets are written
+ * the same way as real xote code rather than with hand-rolled thunks.
+ *
+ * One upstream limitation shapes the JSX below — see docs/authoring-snippets.md:
+ * sibling JSX children raise Not_found in the playground compiler, so a list of
+ * children goes through an explicit XoteJSX.array(...) as a single child.
  */
-export const DEFAULT_SNIPPET = `// A counter. Note the explicit thunks: the playground compiler cannot run
-// the @xote.component PPX, so reactive reads are written out by hand.
+export const DEFAULT_SNIPPET = `@@jsxConfig({version: 4, module_: "XoteJSX"})
 
-let count = Signal.make(0)
+// @xote.component decomposes this into fine-grained reactive leaves: the
+// element structure is built once, and only the parts that read a signal
+// re-run. Note class="counter" stays a plain string in the output, while
+// {Signal.get(count)} becomes View.child(() => ...).
 
-let button = (label, onClick) =>
-  View.element(
-    "button",
-    ~attrs=[View.attr("type", "button"), View.attr("class", "btn")],
-    ~events=[("click", onClick)],
-    ~children=[View.text(label)],
-    (),
-  )
+@xote.component
+let make = () => {
+  let count = Signal.make(0)
 
-let make = () =>
-  View.element(
-    "div",
-    ~attrs=[View.attr("class", "counter")],
-    ~children=[
-      button("-", _ => Signal.update(count, n => n - 1)),
-      View.element(
-        "span",
-        ~attrs=[View.attr("class", "value")],
-        // signalInt takes a thunk; every signal read inside it subscribes
-        // this text node and nothing else.
-        ~children=[View.signalInt(() => Signal.get(count))],
-        (),
-      ),
-      button("+", _ => Signal.update(count, n => n + 1)),
-    ],
-    (),
-  )
+  <div class="counter">
+    {XoteJSX.array([
+      <button onClick={_ => Signal.update(count, n => n - 1)}> {View.text("-")} </button>,
+      <span class="value"> {Signal.get(count)} </span>,
+      <button onClick={_ => Signal.update(count, n => n + 1)}> {View.text("+")} </button>,
+    ])}
+  </div>
+}
 `
