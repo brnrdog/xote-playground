@@ -93,6 +93,20 @@ docs/
 
 ## Status
 
-Scaffold. `scripts/build-bundle.sh` encodes the intended pipeline but has **not
-been executed end to end** — see the TODO markers in it for the two steps that
-need verifying against the pinned compiler checkout.
+`scripts/build-bundle.sh` is written against the real v12.3.1 compiler tree
+(`packages/playground/`, `make playground`, `scripts/generate_cmijs.mjs`), not
+guessed. It has still **not been run end to end** — that first run is the real
+test.
+
+Notes from reading that tree, in case the build surprises you:
+
+- The ReScript repo is a **Yarn 4 workspace**. `npm ci` fails on it with
+  `EUNSUPPORTEDPROTOCOL … Unsupported URL Type "workspace:"`, because
+  `workspace:^` is a Yarn/pnpm protocol. Use `corepack enable && yarn install`.
+- cmij layout is `packages/<name>/cmij.js` with the stdlib under
+  `packages/compiler-builtins/`, not a flat `stdlib/cmij.js`.
+- Dependencies are declared in `packages/playground/rescript.json` and packed
+  from `<compiler>/node_modules/<name>/lib/ocaml`, which is why step 2 of the
+  build script edits that manifest.
+- The playground API has **no `setConfig`** and no JSX-module setting — see
+  `docs/authoring-snippets.md`.

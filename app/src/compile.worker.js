@@ -10,6 +10,18 @@
 
 const BUNDLE = '/bundle'
 
+const JSX_CONFIG = '@@jsxConfig({version: 4, module_: "XoteJSX"})'
+
+/**
+ * The playground compiler has no knob for the JSX module, so the only way to get
+ * xote's generic transform instead of React's is the file-level attribute. We
+ * prepend it unless the snippet set its own, and keep it on one line so reported
+ * error rows still line up with what the user typed.
+ */
+function prependJsxConfig(code) {
+  return code.includes('@@jsxConfig') ? code : `${JSX_CONFIG} ${code}`
+}
+
 let compiler = null
 
 /**
@@ -47,17 +59,26 @@ function load() {
 
   assertBundlePresent()
 
+  // compiler-builtins carries the stdlib; each dependency gets its own cmij.
+  // Order matters: the compiler must be loaded before any cmij registers itself.
   importScripts(
     `${BUNDLE}/compiler.js`,
-    `${BUNDLE}/stdlib/cmij.js`,
-    `${BUNDLE}/xote.cmij.js`,
+    `${BUNDLE}/packages/compiler-builtins/cmij.js`,
+    `${BUNDLE}/packages/rescript-signals/cmij.js`,
+    `${BUNDLE}/packages/xote/cmij.js`,
   )
 
   compiler = self.rescript_compiler.make()
   compiler.setModuleSystem('esmodule')
-  // Mirrors docs-website/rescript.json: -open Xote plus the XoteJSX transform.
+  // Mirrors xote's `-open Xote` compiler flag.
   compiler.setOpenModules(['Xote'])
-  compiler.setConfig({ module_system: 'esmodule', jsx: { version: 4, module_: 'XoteJSX' } })
+  // NOTE: there is no setConfig, and the JSX *module* cannot be set through the
+  // playground API at all — jsoo_playground_main.ml exposes only
+  // setModuleSystem / setFilename / setWarnFlags / setOpenModules /
+  // setExperimentalFeatures / setJsxPreserveMode, and hardcodes JSX v4 with the
+  // React transform. Snippets that use JSX must opt into the generic transform
+  // in-file with `@@jsxConfig({version: 4, module_: "XoteJSX"})`; prependJsxConfig
+  // below does that for them.
 
   return compiler
 }
@@ -67,7 +88,7 @@ self.onmessage = (event) => {
 
   let result
   try {
-    result = load().rescript.compile(code)
+    result = load().rescript.compile(prependJsxConfig(code))
   } catch (err) {
     self.postMessage({
       id,

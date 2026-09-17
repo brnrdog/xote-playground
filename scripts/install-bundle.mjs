@@ -16,7 +16,12 @@ const root = path.join(import.meta.dirname, '..')
 const from = path.resolve(process.argv[2] ?? path.join(root, 'dist'))
 const to = path.join(root, 'app', 'public', 'bundle')
 
-const REQUIRED = ['compiler.js', 'stdlib/cmij.js', 'xote.cmij.js']
+const REQUIRED = [
+  'compiler.js',
+  'packages/compiler-builtins/cmij.js',
+  'packages/rescript-signals/cmij.js',
+  'packages/xote/cmij.js',
+]
 
 try {
   await access(from)

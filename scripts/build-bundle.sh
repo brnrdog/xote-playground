@@ -3,12 +3,14 @@
 # Build a ReScript playground compiler bundle with xote baked into its cmij set.
 #
 # Output (in dist/):
-#   compiler.js          js_of_ocaml build of the ReScript compiler
-#   stdlib/*.cmij.js     stdlib artifacts the compiler resolves against
-#   xote.cmij.js         xote + rescript-signals artifacts
+#   compiler.js                     js_of_ocaml build of the ReScript compiler
+#   packages/compiler-builtins/     stdlib cmij + the rolled-up ES6 runtime
+#   packages/xote/cmij.js           xote artifacts
+#   packages/rescript-signals/cmij.js
 #
-# Requirements: opam/OCaml (the version the pinned compiler expects), node, npm.
-# CI installs these via .github/workflows/bundle.yml.
+# Requirements: opam/OCaml with js_of_ocaml, dune, node, and corepack (for Yarn).
+# The ReScript repo is a Yarn 4 workspace — npm cannot install it, because
+# `workspace:^` is a Yarn/pnpm protocol that npm rejects with EUNSUPPORTEDPROTOCOL.
 
 set -euo pipefail
 
@@ -30,56 +32,57 @@ mkdir -p "${WORK}" "${DIST}"
 git clone --depth 1 --branch "v${RESCRIPT_VERSION}" \
   https://github.com/rescript-lang/rescript.git "${WORK}/rescript"
 
-cd "${WORK}/rescript"
-opam install . --deps-only --yes
-npm ci
+COMPILER="${WORK}/rescript"
+PLAYGROUND="${COMPILER}/packages/playground"
 
 # ---------------------------------------------------------------------------
-# 2. Build the playground compiler
+# 2. Register xote as a playground dependency
 #
-# TODO(verify): the playground target has moved between compiler versions
-# (`make playground` in v10/v11; the v12 tree reorganised the jsoo build).
-# Confirm the target name and the emitted path against the checkout above
-# before trusting this step, then delete this comment.
+# packages/playground/scripts/generate_cmijs.mjs reads the `dependencies` array
+# of packages/playground/rescript.json and, for each entry, packs
+# <compiler>/node_modules/<name>/lib/ocaml/*.{cmi,cmj} into a cmij. So adding
+# xote is a matter of declaring it in both manifests before building.
 # ---------------------------------------------------------------------------
+node - "${PLAYGROUND}" "${XOTE_VERSION}" <<'NODE'
+const fs = require('node:fs')
+const path = require('node:path')
+const [playground, xoteVersion] = process.argv.slice(2)
+
+const resConfigPath = path.join(playground, 'rescript.json')
+const resConfig = JSON.parse(fs.readFileSync(resConfigPath, 'utf8'))
+for (const dep of ['xote', 'rescript-signals']) {
+  if (!resConfig.dependencies.includes(dep)) resConfig.dependencies.push(dep)
+}
+fs.writeFileSync(resConfigPath, JSON.stringify(resConfig, null, 2) + '\n')
+
+const pkgPath = path.join(playground, 'package.json')
+const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'))
+pkg.dependencies.xote = xoteVersion
+pkg.dependencies['rescript-signals'] = '*'
+fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n')
+
+console.log('playground deps:', resConfig.dependencies.join(', '))
+NODE
+
+# ---------------------------------------------------------------------------
+# 3. Install (Yarn 4, via corepack) and build
+# ---------------------------------------------------------------------------
+cd "${COMPILER}"
+corepack enable
+yarn install --no-immutable   # --no-immutable: we just edited two manifests
+
+opam install . --deps-only --yes
+
+# `make playground` = playground-compiler (dune --profile browser, jsoo) plus
+# playground-cmijs (`yarn workspace playground build`, which runs
+# generate_cmijs.mjs and the rollup that emits the ES6 runtime).
 make playground
 
-find . -name 'compiler.js' -not -path './node_modules/*' -print -quit \
-  | xargs -I{} cp {} "${DIST}/compiler.js"
-
-# Stdlib cmij archives emitted alongside the compiler.
-find . -name '*.cmij.js' -not -path './node_modules/*' -print0 \
-  | xargs -0 -I{} cp {} "${DIST}/"
-
 # ---------------------------------------------------------------------------
-# 3. Compile xote + rescript-signals and pack their artifacts into a cmij
-#
-# The playground can only compile against modules whose .cmi/.cmj are present in
-# its cmij set. We build xote from source with the pinned compiler so the
-# artifacts match the compiler.js ABI exactly — artifacts from a different
-# compiler build will not load.
-#
-# TODO(verify): the packing helper is `jsoo_mkcmij` / `packages/playground` in
-# the compiler tree depending on version. Point PACK at the real one.
+# 4. Collect
 # ---------------------------------------------------------------------------
-cd "${WORK}"
-npm install "xote@${XOTE_VERSION}" "rescript@${RESCRIPT_VERSION}" rescript-signals
-
-BSC="${WORK}/node_modules/.bin/bsc"
-ARTIFACTS="${WORK}/artifacts"
-mkdir -p "${ARTIFACTS}"
-
-# xote ships its sources (package.json "files" includes src/**/*.res{,i}), so we
-# compile them here rather than relying on prebuilt artifacts.
-for f in "${WORK}"/node_modules/xote/src/*.res; do
-  "${BSC}" -bs-package-output es6:"${ARTIFACTS}" \
-           -bs-jsx 4 -bs-jsx-module XoteJSX \
-           -I "${ARTIFACTS}" \
-           -c "$f"
-done
-
-PACK="${WORK}/rescript/scripts/jsoo_mkcmij.js"   # TODO(verify) see above
-node "${PACK}" --output "${DIST}/xote.cmij.js" "${ARTIFACTS}"
+cp "${PLAYGROUND}/compiler.js" "${DIST}/compiler.js"
+cp -R "${PLAYGROUND}/packages" "${DIST}/packages"
 
 echo "==> bundle written to ${DIST}"
-ls -la "${DIST}"
+find "${DIST}" -name 'cmij.js' | sort

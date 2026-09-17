@@ -22,9 +22,12 @@ jobs:
         with:
           node-version: 22
 
+      - run: corepack enable
+
       - uses: ocaml/setup-ocaml@v3
         with:
-          # Must match the compiler version pinned in bundle/rescript.version.
+          # Must satisfy the pinned compiler's opam constraints; see its
+          # dune-project. Bump alongside bundle/rescript.version.
           ocaml-compiler: '5.2'
 
       - name: Build bundle

@@ -27,13 +27,18 @@ sandbox.window = sandbox
 vm.createContext(sandbox)
 
 vm.runInContext(readFileSync(path.join(dist, 'compiler.js'), 'utf8'), sandbox)
-for (const cmij of ['stdlib/cmij.js', 'xote.cmij.js']) {
+for (const cmij of [
+  'packages/compiler-builtins/cmij.js',
+  'packages/rescript-signals/cmij.js',
+  'packages/xote/cmij.js',
+]) {
   vm.runInContext(readFileSync(path.join(dist, cmij), 'utf8'), sandbox)
 }
 
 const compiler = sandbox.rescript_compiler.make()
 compiler.setModuleSystem('esmodule')
 compiler.setOpenModules(['Xote'])
+console.log('compiler version:', sandbox.rescript_compiler.version)
 
 const result = compiler.rescript.compile(SNIPPET)
 

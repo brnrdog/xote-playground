@@ -18,6 +18,24 @@ Practically, write the reactive parts by hand:
 | bare `{"text"}` child            | `View.text("text")`                         |
 | `<View.Int>` via bare child      | `View.signalInt(count)`                     |
 
+## JSX needs a file-level attribute
+
+The playground compiler hardcodes JSX v4 with the **React** transform, and
+exposes no way to change it: `jsoo_playground_main.ml` (v12.3.1) offers only
+`setModuleSystem`, `setFilename`, `setWarnFlags`, `setOpenModules`,
+`setExperimentalFeatures` and `setJsxPreserveMode`. There is no `setConfig` and
+no JSX-module knob.
+
+The escape hatch is the file-level attribute, which the compile worker prepends
+automatically unless a snippet declares its own:
+
+```rescript
+@@jsxConfig({version: 4, module_: "XoteJSX"})
+```
+
+So JSX does work in the playground — just not via configuration. A snippet that
+wants different JSX settings should write its own `@@jsxConfig` line.
+
 ## Every snippet exports `make`
 
 The runner bootstraps with `View.mount(root, make())`. A snippet must therefore
