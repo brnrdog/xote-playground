@@ -26,9 +26,11 @@ WORK="${ROOT}/.work"
 DIST="${ROOT}/dist"
 RESCRIPT_VERSION="$(tr -d '[:space:]' < "${ROOT}/bundle/rescript.version")"
 XOTE_VERSION="$(tr -d '[:space:]' < "${ROOT}/bundle/xote.version")"
+OCAML_VERSION="$(tr -d '[:space:]' < "${ROOT}/bundle/ocaml.version")"
 
 echo "==> ReScript compiler: v${RESCRIPT_VERSION}"
 echo "==> xote:              ${XOTE_VERSION}"
+echo "==> OCaml (if a switch is needed): ${OCAML_VERSION}"
 
 # ---------------------------------------------------------------------------
 # 0. Preflight
@@ -42,7 +44,10 @@ echo "==> xote:              ${XOTE_VERSION}"
 # step 3 shims it onto PATH.
 # ---------------------------------------------------------------------------
 missing=()
-for tool in git node opam dune cargo python3; do
+# dune is deliberately NOT here: rescript.opam declares it, so `opam install`
+# provides it inside the switch. Requiring it up front would block exactly the
+# fresh-switch case this script now handles.
+for tool in git make node opam cargo python3; do
   command -v "${tool}" >/dev/null 2>&1 || missing+=("${tool}")
 done
 
@@ -56,8 +61,10 @@ if [ ${#missing[@]} -gt 0 ]; then
         echo >&2 "          the stdlib build depends on it. Needs Rust >= 1.91"
         echo >&2 "          (rewatch/Cargo.toml rust-version). Install: https://rustup.rs"
         ;;
-      opam|dune)
-        echo >&2 "  ${tool}    Install opam, then: opam switch create 5.3.0"
+      opam)
+        echo >&2 "  opam    The OCaml package manager: https://opam.ocaml.org/doc/Install.html"
+        echo >&2 "          No switch setup needed — this script creates its own if"
+        echo >&2 "          the active one is older than OCaml 5.0."
         ;;
       python3)
         echo >&2 "  python3 Used to bootstrap ninja (also needs a C++ compiler)."
@@ -174,6 +181,39 @@ yarn install --no-immutable   # --no-immutable: we just edited two manifests
 #   Program js_of_ocaml not found in the tree or in PATH
 # The opam file also pin-depends flow_parser on a git fork, which opam resolves
 # from the pin — so install from this directory, not by package name.
+# The active switch may be too old (rescript.opam needs ocaml >= 5.0.0) or have
+# a locked base, in which case installing into it fails with:
+#   - ocaml-compiler -> compiler-cloning < enabled
+#       base of this switch (use `--unlock-base' to force)
+# Do not force that: rebuilding someone's global switch base to build a bundle is
+# not ours to do, and --unlock-base can leave the switch unusable for their other
+# projects. Create a dedicated local switch (a _opam/ inside the throwaway
+# checkout) instead, and only when the active switch will not do.
+active_ocaml="$(ocamlc -version 2>/dev/null || true)"
+active_major="${active_ocaml%%.*}"
+
+use_local_switch=1
+if [ -n "${active_ocaml}" ] && [ "${active_major:-0}" -ge 5 ] 2>/dev/null; then
+  if [ "${XOTE_PLAYGROUND_LOCAL_SWITCH:-0}" = "1" ]; then
+    echo "==> active switch has OCaml ${active_ocaml}, but a local switch was requested"
+  else
+    echo "==> using the active switch (OCaml ${active_ocaml})"
+    use_local_switch=0
+  fi
+else
+  echo "==> active switch is unusable (OCaml '${active_ocaml:-none}', need >= 5.0)"
+fi
+
+if [ "${use_local_switch}" = "1" ]; then
+  echo "==> creating a local opam switch in ${COMPILER} (OCaml ${OCAML_VERSION})"
+  echo "    This compiles OCaml from source and takes a while; it is done once"
+  echo "    per build directory and leaves your global switch untouched."
+  opam switch create "${COMPILER}" "ocaml-base-compiler.${OCAML_VERSION}" \
+    --no-install --yes
+  eval "$(opam env --switch="${COMPILER}" --set-switch)"
+  echo "==> local switch OCaml: $(ocamlc -version)"
+fi
+
 opam install . --deps-only --with-test --yes
 
 # `make playground` = playground-compiler (dune --profile browser, jsoo) plus
