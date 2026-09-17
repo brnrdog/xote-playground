@@ -18,6 +18,13 @@ assert.equal(
   'import * as S from "https://play.xote.dev/vendor/rescript-signals/src/Signal.res.mjs"',
 )
 
+// ReScript 12 moved the runtime out of `rescript` and into `@rescript/runtime`;
+// that is what xote's published .res.mjs actually import.
+assert.equal(
+  rewriteImports('import * as P from "@rescript/runtime/lib/es6/Primitive_option.js"', ORIGIN),
+  'import * as P from "https://play.xote.dev/vendor/@rescript/runtime/lib/es6/Primitive_option.js"',
+)
+
 // Relative, absolute and already-qualified specifiers are left alone.
 for (const spec of ['./local.js', '/abs.js', 'https://cdn.example/x.js']) {
   const src = `import x from "${spec}"`

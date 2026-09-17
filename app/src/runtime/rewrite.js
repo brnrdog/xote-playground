@@ -2,7 +2,7 @@
  * The playground emits ESM with bare specifiers:
  *
  *   import * as Signal from "xote/src/Signal.res.mjs"
- *   import * as Caml_option from "rescript/lib/es6/caml_option.js"
+ *   import * as P from "@rescript/runtime/lib/es6/Primitive_option.js"
  *
  * A blob/srcdoc module cannot resolve those, so we rewrite them to URLs the
  * sandbox can fetch. We rewrite rather than emit an import map because the
@@ -12,8 +12,11 @@
  */
 
 /** Bare specifier prefix -> URL prefix. */
+// Order matters: '@rescript/runtime/' must be tried before any shorter prefix
+// that could also match it.
 const DEFAULT_MAP = {
   'xote/': '/vendor/xote/',
+  '@rescript/runtime/': '/vendor/@rescript/runtime/',
   'rescript/': '/vendor/rescript/',
   'rescript-signals/': '/vendor/rescript-signals/',
 }

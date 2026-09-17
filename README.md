@@ -54,7 +54,7 @@ Building the bundle needs a fuller toolchain than a JS project usually implies:
 
 | Tool | Why |
 |---|---|
-| opam | the OCaml package manager. **No switch setup needed** — if your active switch is older than OCaml 5.0, the build creates its own local switch (see below) |
+| **opam >= 2.1** | the OCaml package manager. Older opam (2.0.x) silently picks prerelease packages and the dep build fails with `Library "seq" not found` — see below. **No switch setup needed** — if your active switch cannot resolve the build deps, the build creates its own local switch (see below) |
 | dune | installed by opam from `rescript.opam`; not a prerequisite |
 | node | the compiler repo is a Yarn 4 workspace, but vendors its own Yarn — corepack is *not* required |
 | **cargo (Rust >= 1.91)** | ReScript 12's `rescript` CLI *is* rewatch, a Rust binary, and the stdlib build depends on it |
@@ -130,12 +130,24 @@ Notes from reading that tree, in case the build surprises you:
   what `.github/workflows/bundle.yml` uses.
 - `rescript.opam` `pin-depends` a `flow_parser` git fork, so deps must be
   installed from the checkout directory (`opam install .`), not by package name.
-- If the active opam switch predates OCaml 5.0, installing the deps into it
-  fails with `ocaml-compiler -> compiler-cloning < enabled / base of this
-  switch`. The build then creates a **local switch** (`_opam/` inside the
-  throwaway checkout) pinned to `bundle/ocaml.version`, rather than passing
-  `--unlock-base` and rebuilding your global switch's compiler. Creating it
-  compiles OCaml from source, so the first build is slow; set
+- **opam 2.0.x cannot build this.** opam 2.1 introduced the `avoid-version`
+  flag, which opam-repository uses to keep prereleases out of solutions. opam
+  2.0 ignores the flag and so *prefers* them — it selects
+  `ocamlfind.1.9.9~preview`, which does not install the `seq` findlib stub, and
+  every dune package depending on `seq` (`gen`, `yojson`, …) then fails with
+  `Error: Library "seq" not found`. The failures look unrelated to opam and land
+  minutes into the build, so `build-bundle.sh` checks the opam version in
+  preflight instead.
+- Installing the deps into the active opam switch can fail with
+  `ocaml-compiler -> compiler-cloning < enabled / base of this switch`. The
+  OCaml version is **not** a reliable predictor of this: it happens on a *new*
+  switch whose base is locked (seen on 5.5.0), not just an old one. So the build
+  does not guess from the version — it asks the solver with
+  `opam install . --deps-only --with-test --dry-run`, which mutates nothing, and
+  falls back only when that probe fails. The fallback is a **local switch**
+  (`_opam/` inside the throwaway checkout) pinned to `bundle/ocaml.version`,
+  rather than passing `--unlock-base` and rebuilding your global switch's
+  compiler. Creating it compiles OCaml from source, so that build is slow; set
   `XOTE_PLAYGROUND_LOCAL_SWITCH=1` to force it even when the active switch
   would do.
 - The checkout vendors Yarn 4 at `.yarn/releases/` (via `.yarnrc.yml`

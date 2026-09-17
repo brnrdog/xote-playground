@@ -10,6 +10,8 @@
 #
 # Requirements (all checked by the preflight below):
 #   opam + OCaml >= 5.0   the compiler itself; js_of_ocaml comes from --with-test
+#                         (a local switch is created when the active one will
+#                         not resolve the deps -- see step 3)
 #   dune                  build driver
 #   node                  the repo is a Yarn 4 workspace; npm cannot install it,
 #                         because `workspace:^` is a Yarn/pnpm protocol npm
@@ -64,7 +66,7 @@ if [ ${#missing[@]} -gt 0 ]; then
       opam)
         echo >&2 "  opam    The OCaml package manager: https://opam.ocaml.org/doc/Install.html"
         echo >&2 "          No switch setup needed — this script creates its own if"
-        echo >&2 "          the active one is older than OCaml 5.0."
+        echo >&2 "          the active one cannot resolve the build deps."
         ;;
       python3)
         echo >&2 "  python3 Used to bootstrap ninja (also needs a C++ compiler)."
@@ -82,6 +84,33 @@ if ! node -e 'process.exit(0)' >/dev/null 2>&1; then
   exit 1
 fi
 
+# opam >= 2.1 is a hard requirement, not a preference, and "opam is installed"
+# does not imply it. opam 2.1 introduced the `avoid-version` flag, which current
+# opam-repository uses to keep prereleases out of solutions. opam 2.0 does not
+# understand the flag, so it silently *prefers* those prereleases -- e.g. it
+# picks ocamlfind.1.9.9~preview, which omits the `seq` findlib stub, and every
+# dune package depending on `seq` (gen, yojson, ...) then fails with
+#   Error: Library "seq" not found.
+# That surfaces as a pile of unrelated-looking package failures minutes in, so
+# catch it here where the cause is still legible.
+opam_version="$(opam --version 2>/dev/null || true)"
+opam_major="${opam_version%%.*}"
+opam_rest="${opam_version#*.}"
+opam_minor="${opam_rest%%.*}"
+if [ "${opam_major:-0}" -lt 2 ] 2>/dev/null ||
+   { [ "${opam_major:-0}" -eq 2 ] && [ "${opam_minor:-0}" -lt 1 ]; } 2>/dev/null; then
+  echo >&2 "==> opam ${opam_version:-unknown} is too old; need >= 2.1"
+  echo >&2
+  echo >&2 "  opam 2.1 added the \`avoid-version\` flag. Without it opam selects"
+  echo >&2 "  prerelease packages that opam-repository marks as to-be-avoided, and"
+  echo >&2 "  the dependency build fails with confusing errors such as"
+  echo >&2 "      Error: Library \"seq\" not found."
+  echo >&2 "  Upgrade: https://opam.ocaml.org/doc/Install.html"
+  echo >&2 "  (then \`opam init --reinit\` to refresh the hooks)"
+  exit 1
+fi
+
+echo "==> opam ${opam_version}"
 echo "==> preflight ok"
 
 # dist/ is created only in step 4, once there is something to put in it. A
@@ -189,19 +218,31 @@ yarn install --no-immutable   # --no-immutable: we just edited two manifests
 # not ours to do, and --unlock-base can leave the switch unusable for their other
 # projects. Create a dedicated local switch (a _opam/ inside the throwaway
 # checkout) instead, and only when the active switch will not do.
+#
+# The OCaml version is necessary but NOT sufficient, so do not decide on it
+# alone: a switch can be new enough and still refuse the install because its
+# base is locked (observed on a 5.5.0 switch, which passes any version test).
+# Ask the solver instead of guessing. --dry-run answers the only question that
+# matters -- "would this install succeed here?" -- and covers the locked base,
+# the too-old compiler and ordinary version conflicts with one probe, without
+# mutating the switch.
 active_ocaml="$(ocamlc -version 2>/dev/null || true)"
-active_major="${active_ocaml%%.*}"
 
 use_local_switch=1
-if [ -n "${active_ocaml}" ] && [ "${active_major:-0}" -ge 5 ] 2>/dev/null; then
-  if [ "${XOTE_PLAYGROUND_LOCAL_SWITCH:-0}" = "1" ]; then
-    echo "==> active switch has OCaml ${active_ocaml}, but a local switch was requested"
-  else
+if [ "${XOTE_PLAYGROUND_LOCAL_SWITCH:-0}" = "1" ]; then
+  echo "==> a local switch was explicitly requested (XOTE_PLAYGROUND_LOCAL_SWITCH=1)"
+elif [ -z "${active_ocaml}" ]; then
+  echo "==> no active OCaml switch"
+else
+  echo "==> active switch has OCaml ${active_ocaml}; asking opam whether it can resolve the deps"
+  # Not `set -e`-fatal: a failure here is a legitimate answer, not a build error.
+  if probe="$(opam install . --deps-only --with-test --dry-run --yes 2>&1)"; then
     echo "==> using the active switch (OCaml ${active_ocaml})"
     use_local_switch=0
+  else
+    echo "==> the active switch cannot resolve the deps; falling back to a local switch"
+    echo "${probe}" | sed -n '/No solution found/,$p;/base of this switch/p' | sed 's/^/    | /'
   fi
-else
-  echo "==> active switch is unusable (OCaml '${active_ocaml:-none}', need >= 5.0)"
 fi
 
 if [ "${use_local_switch}" = "1" ]; then

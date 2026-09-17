@@ -13,10 +13,13 @@ import { createRequire } from 'node:module'
 const require = createRequire(import.meta.url)
 const out = path.join(import.meta.dirname, '..', 'app', 'public', 'vendor')
 
+// ReScript 12 split the runtime out of the `rescript` package (which now ships
+// only the CLI and native binaries) into `@rescript/runtime`. That is the
+// package xote's published .res.mjs import from, so that is what must be here.
 const COPIES = [
   ['xote', ['src']],
   ['rescript-signals', ['src']],
-  ['rescript', ['lib/es6']],
+  ['@rescript/runtime', ['lib/es6']],
 ]
 
 await rm(out, { recursive: true, force: true })
