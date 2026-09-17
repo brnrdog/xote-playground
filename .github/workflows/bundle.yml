@@ -24,6 +24,14 @@ jobs:
 
       - run: corepack enable
 
+      # ReScript 12's `rescript` CLI is rewatch, a Rust binary, and the stdlib
+      # build (a prerequisite of playground-cmijs) shells out to it. Without
+      # cargo, `make playground` builds compiler.js and then dies.
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          # rewatch/Cargo.toml pins rust-version = "1.91".
+          toolchain: '1.91'
+
       - uses: ocaml/setup-ocaml@v3
         with:
           # rescript.opam requires ocaml >= 5.0.0; upstream CI builds the

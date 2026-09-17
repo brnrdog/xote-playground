@@ -8,9 +8,15 @@
 #   packages/xote/cmij.js           xote artifacts
 #   packages/rescript-signals/cmij.js
 #
-# Requirements: opam/OCaml with js_of_ocaml, dune, node, and corepack (for Yarn).
-# The ReScript repo is a Yarn 4 workspace — npm cannot install it, because
-# `workspace:^` is a Yarn/pnpm protocol that npm rejects with EUNSUPPORTEDPROTOCOL.
+# Requirements (all checked by the preflight below):
+#   opam + OCaml >= 5.0   the compiler itself; js_of_ocaml comes from --with-test
+#   dune                  build driver
+#   node + corepack       the repo is a Yarn 4 workspace; npm cannot install it,
+#                         because `workspace:^` is a Yarn/pnpm protocol npm
+#                         rejects with EUNSUPPORTEDPROTOCOL
+#   cargo (Rust >= 1.91)  in ReScript 12 the `rescript` CLI *is* rewatch, a Rust
+#                         binary, and the stdlib build depends on it
+#   python3 + a C++ compiler   bootstrap ninja
 
 set -euo pipefail
 
@@ -22,6 +28,50 @@ XOTE_VERSION="$(tr -d '[:space:]' < "${ROOT}/bundle/xote.version")"
 
 echo "==> ReScript compiler: v${RESCRIPT_VERSION}"
 echo "==> xote:              ${XOTE_VERSION}"
+
+# ---------------------------------------------------------------------------
+# 0. Preflight
+#
+# The clone and the jsoo build take several minutes, so a missing tool must be
+# reported now, not after a long wait. cargo in particular is easy to miss: it
+# is needed for the *stdlib* half of the build, long after compiler.js is
+# already sitting on disk looking like success.
+# ---------------------------------------------------------------------------
+missing=()
+for tool in git node opam dune cargo python3; do
+  command -v "${tool}" >/dev/null 2>&1 || missing+=("${tool}")
+done
+
+if [ ${#missing[@]} -gt 0 ]; then
+  echo >&2 "==> Missing required tools: ${missing[*]}"
+  echo >&2
+  for tool in "${missing[@]}"; do
+    case "${tool}" in
+      cargo)
+        echo >&2 "  cargo   ReScript 12's \`rescript\` CLI is rewatch, a Rust binary, and"
+        echo >&2 "          the stdlib build depends on it. Needs Rust >= 1.91"
+        echo >&2 "          (rewatch/Cargo.toml rust-version). Install: https://rustup.rs"
+        ;;
+      opam|dune)
+        echo >&2 "  ${tool}    Install opam, then: opam switch create 5.3.0"
+        ;;
+      python3)
+        echo >&2 "  python3 Used to bootstrap ninja (also needs a C++ compiler)."
+        ;;
+      *)
+        echo >&2 "  ${tool}"
+        ;;
+    esac
+  done
+  exit 1
+fi
+
+if ! node -e 'process.exit(0)' >/dev/null 2>&1; then
+  echo >&2 "==> node is present but not runnable"
+  exit 1
+fi
+
+echo "==> preflight ok"
 
 # dist/ is created only in step 4, once there is something to put in it. A
 # half-built dist/ is worse than none: install-bundle.mjs would report it as an

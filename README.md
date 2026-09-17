@@ -50,9 +50,22 @@ The playground does not work from a fresh clone alone: the compiler bundle is a
 build artifact, not source, and it is gitignored. Without it the editor loads and
 every compile fails with "No compiler bundle installed."
 
+Building the bundle needs a fuller toolchain than a JS project usually implies:
+
+| Tool | Why |
+|---|---|
+| opam + OCaml >= 5.0 | the compiler; CI uses 5.3.0, as upstream does |
+| dune | build driver |
+| node + corepack | the compiler repo is a Yarn 4 workspace |
+| **cargo (Rust >= 1.91)** | ReScript 12's `rescript` CLI *is* rewatch, a Rust binary, and the stdlib build depends on it |
+| python3 + a C++ compiler | bootstraps ninja |
+
+`scripts/build-bundle.sh` checks all of these up front and names what is
+missing, rather than failing minutes into the build.
+
 ```sh
 npm install                 # runtime deps (xote, rescript-signals, rescript)
-./scripts/build-bundle.sh   # produces dist/ — needs OCaml + opam, see below
+./scripts/build-bundle.sh   # produces dist/
 npm run setup               # installs app deps, vendors runtime modules, installs the bundle
 npm run dev
 ```
@@ -117,3 +130,7 @@ Notes from reading that tree, in case the build surprises you:
   what `.github/workflows/bundle.yml` uses.
 - `rescript.opam` `pin-depends` a `flow_parser` git fork, so deps must be
   installed from the checkout directory (`opam install .`), not by package name.
+- `make playground` succeeds at `playground-compiler` (jsoo) and *then* needs
+  cargo for `playground-cmijs`: that target depends on the stdlib build, which
+  depends on `$(RESCRIPT_EXE)` — rewatch. So a cargo-less machine produces a
+  perfectly good `compiler.js` and no cmijs at all.
