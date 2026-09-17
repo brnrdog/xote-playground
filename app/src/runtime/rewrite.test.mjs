@@ -25,6 +25,33 @@ assert.equal(
   'import * as P from "https://play.xote.dev/vendor/@rescript/runtime/lib/es6/Primitive_option.js"',
 )
 
+// The playground compiler emits every cmij module as "./stdlib/<Module>.js",
+// namespace-suffixed. Those are relative, so they cannot resolve from the
+// blob: URL the snippet runs as -- they must be mapped through the manifest
+// that vendor.mjs writes.
+const MANIFEST = {
+  'View-Xote': '/vendor/xote/src/View.res.mjs',
+  'Signal-Signals': '/vendor/rescript-signals/src/signals/Signal.res.mjs',
+  Stdlib_Option: '/vendor/@rescript/runtime/lib/es6/Stdlib_Option.js',
+}
+assert.equal(
+  rewriteImports('import * as V from "./stdlib/View-Xote.js"', ORIGIN, undefined, MANIFEST),
+  'import * as V from "https://play.xote.dev/vendor/xote/src/View.res.mjs"',
+)
+assert.equal(
+  rewriteImports('import * as S from "./stdlib/Signal-Signals.js"', ORIGIN, undefined, MANIFEST),
+  'import * as S from "https://play.xote.dev/vendor/rescript-signals/src/signals/Signal.res.mjs"',
+)
+assert.equal(
+  rewriteImports('import * as O from "./stdlib/Stdlib_Option.js"', ORIGIN, undefined, MANIFEST),
+  'import * as O from "https://play.xote.dev/vendor/@rescript/runtime/lib/es6/Stdlib_Option.js"',
+)
+// An unknown stdlib module is left intact so the failure names it.
+assert.equal(
+  rewriteImports('import * as X from "./stdlib/Nope.js"', ORIGIN, undefined, MANIFEST),
+  'import * as X from "./stdlib/Nope.js"',
+)
+
 // Relative, absolute and already-qualified specifiers are left alone.
 for (const spec of ['./local.js', '/abs.js', 'https://cdn.example/x.js']) {
   const src = `import x from "${spec}"`

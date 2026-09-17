@@ -1,0 +1,49 @@
+/*
+ * Styles for the sandboxed preview iframe.
+ *
+ * runner.js links this into the frame's srcdoc. It is served from public/
+ * rather than imported, because the frame has an opaque origin and loads it as
+ * a plain stylesheet URL, outside Vite's module graph.
+ *
+ * Theme tokens are duplicated from src/styles.css instead of shared: the frame
+ * is a separate document and cannot inherit the host page's custom properties.
+ */
+:root {
+  --pg-bg: #ffffff;
+  --pg-fg: #16181d;
+  --pg-muted: #6b7280;
+  --pg-border: #e5e7eb;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --pg-bg: #0f1115;
+    --pg-fg: #e6e8eb;
+    --pg-muted: #9aa2ad;
+    --pg-border: #262b33;
+  }
+}
+
+body {
+  margin: 0;
+  padding: 16px;
+  background: var(--pg-bg);
+  color: var(--pg-fg);
+  font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+button {
+  font: inherit;
+  color: var(--pg-fg);
+  background: var(--pg-bg);
+  border: 1px solid var(--pg-border);
+  border-radius: 6px;
+  padding: 4px 12px;
+  cursor: pointer;
+}
+
+button:hover { border-color: var(--pg-muted); }
+
+/* Classes used by the bundled snippets (see src/snippets.js). */
+.counter { display: flex; align-items: center; gap: 12px; }
+.counter .value { min-width: 3ch; text-align: center; font-variant-numeric: tabular-nums; font-size: 18px; }

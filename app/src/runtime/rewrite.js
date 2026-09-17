@@ -24,8 +24,30 @@ const DEFAULT_MAP = {
 // The `\(?` arm covers dynamic `import("…")` as well as static imports.
 const SPECIFIER = /(\bfrom\s*|\bimport\s*\(?\s*)(["'])([^"']+)\2/g
 
-export function rewriteImports(js, origin, map = DEFAULT_MAP) {
+/**
+ * The playground compiler emits every module in the cmij set as
+ * "./stdlib/<Module>.js" -- namespaced ones as "<Module>-<Namespace>.js". That
+ * path is a fiction: it refers to the compiler's own virtual filesystem, not to
+ * anything servable. It is also *relative*, so it cannot resolve at all from the
+ * blob: URL the snippet runs as ("base scheme isn't hierarchical").
+ *
+ * `manifest` maps that bare module name to a vendored URL. vendor.mjs builds it
+ * by walking what it actually copied, rather than reconstructing paths from
+ * package layout, because layout varies (rescript-signals nests under
+ * src/signals/, xote is flat under src/).
+ */
+const STDLIB = './stdlib/'
+
+export function rewriteImports(js, origin, map = DEFAULT_MAP, manifest = {}) {
   return js.replace(SPECIFIER, (match, keyword, quote, specifier) => {
+    if (specifier.startsWith(STDLIB)) {
+      const mod = specifier.slice(STDLIB.length).replace(/\.js$/, '')
+      const target = manifest[mod]
+      // Leave an unknown module intact: the failure then names it, which is the
+      // only clue that the cmij set and the vendored runtime disagree.
+      return target ? `${keyword}${quote}${origin}${target}${quote}` : match
+    }
+
     if (specifier.startsWith('.') || specifier.startsWith('/') || specifier.includes('://')) {
       return match
     }
