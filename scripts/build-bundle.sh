@@ -11,9 +11,10 @@
 # Requirements (all checked by the preflight below):
 #   opam + OCaml >= 5.0   the compiler itself; js_of_ocaml comes from --with-test
 #   dune                  build driver
-#   node + corepack       the repo is a Yarn 4 workspace; npm cannot install it,
+#   node                  the repo is a Yarn 4 workspace; npm cannot install it,
 #                         because `workspace:^` is a Yarn/pnpm protocol npm
-#                         rejects with EUNSUPPORTEDPROTOCOL
+#                         rejects with EUNSUPPORTEDPROTOCOL. Yarn itself is
+#                         vendored in the checkout, so corepack is NOT needed.
 #   cargo (Rust >= 1.91)  in ReScript 12 the `rescript` CLI *is* rewatch, a Rust
 #                         binary, and the stdlib build depends on it
 #   python3 + a C++ compiler   bootstrap ninja
@@ -36,6 +37,9 @@ echo "==> xote:              ${XOTE_VERSION}"
 # reported now, not after a long wait. cargo in particular is easy to miss: it
 # is needed for the *stdlib* half of the build, long after compiler.js is
 # already sitting on disk looking like success.
+#
+# yarn is deliberately absent from this list: the checkout vendors its own, and
+# step 3 shims it onto PATH.
 # ---------------------------------------------------------------------------
 missing=()
 for tool in git node opam dune cargo python3; do
@@ -129,10 +133,39 @@ console.log('playground deps:', resConfig.dependencies.join(', '))
 NODE
 
 # ---------------------------------------------------------------------------
-# 3. Install (Yarn 4, via corepack) and build
+# 3. Install (Yarn 4, vendored in the checkout) and build
 # ---------------------------------------------------------------------------
 cd "${COMPILER}"
-corepack enable
+
+# The checkout vendors its own Yarn (.yarnrc.yml `yarnPath`), which runs under
+# plain node. Shim it onto PATH rather than depending on corepack: corepack is
+# not present on every Node install (and is being unbundled from Node), and a
+# globally installed Yarn Classic would be the wrong major version for this
+# Yarn 4 workspace. `make playground` shells out to `yarn workspace ...` too, so
+# the shim has to be on PATH, not just a local variable.
+YARN_PATH="$(node -e '
+  const fs = require("node:fs")
+  const m = fs.readFileSync(".yarnrc.yml", "utf8").match(/^yarnPath:\s*(.+)$/m)
+  if (!m) { console.error("no yarnPath in .yarnrc.yml"); process.exit(1) }
+  process.stdout.write(m[1].trim())
+')"
+
+if [ ! -f "${COMPILER}/${YARN_PATH}" ]; then
+  echo >&2 "==> vendored yarn missing: ${COMPILER}/${YARN_PATH}"
+  exit 1
+fi
+
+SHIM_BIN="${WORK}/bin"
+mkdir -p "${SHIM_BIN}"
+cat > "${SHIM_BIN}/yarn" <<SHIM
+#!/usr/bin/env bash
+exec node "${COMPILER}/${YARN_PATH}" "\$@"
+SHIM
+chmod +x "${SHIM_BIN}/yarn"
+export PATH="${SHIM_BIN}:${PATH}"
+
+echo "==> yarn $(yarn --version) (vendored)"
+
 yarn install --no-immutable   # --no-immutable: we just edited two manifests
 
 # --with-test is load-bearing, not a nicety: rescript.opam declares js_of_ocaml

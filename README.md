@@ -56,7 +56,7 @@ Building the bundle needs a fuller toolchain than a JS project usually implies:
 |---|---|
 | opam + OCaml >= 5.0 | the compiler; CI uses 5.3.0, as upstream does |
 | dune | build driver |
-| node + corepack | the compiler repo is a Yarn 4 workspace |
+| node | the compiler repo is a Yarn 4 workspace, but vendors its own Yarn — corepack is *not* required |
 | **cargo (Rust >= 1.91)** | ReScript 12's `rescript` CLI *is* rewatch, a Rust binary, and the stdlib build depends on it |
 | python3 + a C++ compiler | bootstraps ninja |
 
@@ -115,7 +115,7 @@ Notes from reading that tree, in case the build surprises you:
 
 - The ReScript repo is a **Yarn 4 workspace**. `npm ci` fails on it with
   `EUNSUPPORTEDPROTOCOL … Unsupported URL Type "workspace:"`, because
-  `workspace:^` is a Yarn/pnpm protocol. Use `corepack enable && yarn install`.
+  `workspace:^` is a Yarn/pnpm protocol. Use the Yarn the checkout vendors.
 - cmij layout is `packages/<name>/cmij.js` with the stdlib under
   `packages/compiler-builtins/`, not a flat `stdlib/cmij.js`.
 - Dependencies are declared in `packages/playground/rescript.json` and packed
@@ -130,6 +130,11 @@ Notes from reading that tree, in case the build surprises you:
   what `.github/workflows/bundle.yml` uses.
 - `rescript.opam` `pin-depends` a `flow_parser` git fork, so deps must be
   installed from the checkout directory (`opam install .`), not by package name.
+- The checkout vendors Yarn 4 at `.yarn/releases/` (via `.yarnrc.yml`
+  `yarnPath`) and it runs under plain `node`. The build shims that onto `PATH`
+  instead of using corepack, which is not present on every Node install and is
+  being unbundled from Node; a global Yarn Classic would be the wrong major
+  version for this workspace.
 - `make playground` succeeds at `playground-compiler` (jsoo) and *then* needs
   cargo for `playground-cmijs`: that target depends on the stdlib build, which
   depends on `$(RESCRIPT_EXE)` — rewatch. So a cargo-less machine produces a

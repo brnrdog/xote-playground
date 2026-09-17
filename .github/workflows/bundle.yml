@@ -22,8 +22,6 @@ jobs:
         with:
           node-version: 22
 
-      - run: corepack enable
-
       # ReScript 12's `rescript` CLI is rewatch, a Rust binary, and the stdlib
       # build (a prerequisite of playground-cmijs) shells out to it. Without
       # cargo, `make playground` builds compiler.js and then dies.
