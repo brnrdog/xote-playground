@@ -16,7 +16,7 @@
     "@lezer/highlight": "^1.2.1",
     "lz-string": "^1.5.0",
     "rescript-signals": "^3.1.2",
-    "xote": "^0.0.0"
+    "xote": "^7.1"
   },
   "devDependencies": {
     "vite": "^8.0.16"
