@@ -190,10 +190,14 @@ Notes from reading that tree, in case the build surprises you:
   found`. `build-bundle.sh` detects this and points at the SDK headers instead;
   the real fix is `sudo rm -rf /Library/Developer/CommandLineTools &&
   sudo xcode-select --install`.
-- **`--with-test` is deliberately not used.** rescript.opam declares js_of_ocaml
-  under `with-test`, but so is `wasm_of_ocaml-compiler`, which drags in a large
-  binaryen C++ build for an artifact the playground never loads. jsoo is
-  installed by name instead, and step 2b drops the jsoo stanza's `wasm` target.
+- **`--with-test` is tried first, with a fallback.** rescript.opam declares
+  js_of_ocaml under `with-test`, so a plain `--deps-only` leaves it out. But
+  `wasm_of_ocaml-compiler` is declared there too, and its binaryen build fails
+  where the C++ toolchain is broken. So the build tries `--with-test`, and only
+  on failure installs `js_of_ocaml` *and* `js_of_ocaml-compiler` by name — the
+  library the jsoo dune stanza links, and the binary `build-fs` needs. Step 2b
+  drops that stanza's `wasm` target either way, since the playground only ever
+  ships `compiler.js`.
 - The checkout vendors Yarn 4 at `.yarn/releases/` (via `.yarnrc.yml`
   `yarnPath`) and it runs under plain `node`. The build shims that onto `PATH`
   instead of using corepack, which is not present on every Node install and is

@@ -113,6 +113,34 @@ fi
 echo "==> opam ${opam_version}"
 echo "==> preflight ok"
 
+# macOS: an old Command Line Tools install can leave a stale libc++ at
+# /Library/Developer/CommandLineTools/usr/include/c++/v1 that *shadows* the
+# current headers in the SDK. clang searches the stale one first and every C++
+# build then dies on a basic header:
+#   fatal error: 'cstdio' file not found     (ninja's bootstrap)
+#   fatal error: 'mutex' file not found      (binaryen, via wasm_of_ocaml)
+# The SDK copy is fine, so point at it explicitly rather than skipping the
+# build: ReScript vendors a *forked* ninja (its lexer accepts `o` as a synonym
+# for `build`), so a system ninja cannot stand in -- it rejects the generated
+# build.ninja with "expected '=', got identifier".
+#
+# The real fix is reinstalling the Command Line Tools; this only gets the build
+# through on a machine that has not.
+if [ "$(uname)" = "Darwin" ]; then
+  sdk_path="$(xcrun --show-sdk-path 2>/dev/null || true)"
+  clt_cxx="/Library/Developer/CommandLineTools/usr/include/c++/v1"
+  # __sso_allocator was removed from libc++ years ago; its presence marks the
+  # stale tree. Absent that, leave a healthy toolchain alone.
+  if [ -n "${sdk_path}" ] && [ -f "${clt_cxx}/__sso_allocator" ] &&
+     [ -d "${sdk_path}/usr/include/c++/v1" ]; then
+    export CXXFLAGS="-isystem ${sdk_path}/usr/include/c++/v1 ${CXXFLAGS:-}"
+    echo "==> stale Command Line Tools libc++ detected; using the SDK headers instead"
+    echo "    (consider reinstalling: sudo rm -rf /Library/Developer/CommandLineTools"
+    echo "     && sudo xcode-select --install)"
+  fi
+fi
+
+
 # dist/ is created only in step 4, once there is something to put in it. A
 # half-built dist/ is worse than none: install-bundle.mjs would report it as an
 # "incomplete bundle" and bury the build error that actually caused it.
@@ -367,33 +395,31 @@ yarn install --no-immutable   # --no-immutable: we just edited two manifests
 # rescript.opam declares js_of_ocaml under `with-test`, so a plain --deps-only
 # leaves jsoo uninstalled and `make playground` dies with
 #   Program js_of_ocaml not found in the tree or in PATH
-# But --with-test ALSO pulls wasm_of_ocaml-compiler, whose binaryen-bin builds a
-# large C++ tree and fails outright on a machine whose Command Line Tools are
-# stale (`fatal error: mutex file not found`). We do not need it: the playground
-# ships compiler.js, and step 2b drops the dune stanza's wasm target. So take
-# jsoo by name and leave the rest of with-test alone.
 # The opam file also pin-depends flow_parser on a git fork, which opam resolves
-# from the pin — so install from this directory, not by package name. That is
+# from the pin -- so install from this directory, not by package name. That is
 # also why this cannot be probed with --dry-run: dry runs skip pin-depends.
-install_deps() {
-  opam install . --deps-only --yes && opam install js_of_ocaml-compiler --yes
-}
-# The active switch may be too old (rescript.opam needs ocaml >= 5.0.0) or have
-# a locked base, in which case installing into it fails with:
-#   - ocaml-compiler -> compiler-cloning < enabled
-#       base of this switch (use `--unlock-base' to force)
-# Do not force that: rebuilding someone's global switch base to build a bundle is
-# not ours to do, and --unlock-base can leave the switch unusable for their other
-# projects. Create a dedicated local switch (a _opam/ inside the throwaway
-# checkout) instead, and only when the active switch will not do.
 #
-# The OCaml version is necessary but NOT sufficient, so do not decide on it
-# alone: a switch can be new enough and still refuse the install because its
-# base is locked (observed on a 5.5.0 switch, which passes any version test).
-# Ask the solver instead of guessing. --dry-run answers the only question that
-# matters -- "would this install succeed here?" -- and covers the locked base,
-# the too-old compiler and ordinary version conflicts with one probe, without
-# mutating the switch.
+# --with-test is the documented path and the one CI uses, so try it first. It
+# also pulls wasm_of_ocaml-compiler, whose binaryen builds a large C++ tree and
+# fails outright where the C++ toolchain is broken (a stale Command Line Tools
+# install on macOS, say). Only then fall back to installing what we actually
+# need by name.
+#
+# Both jsoo packages, deliberately: `js_of_ocaml` is the library the jsoo dune
+# stanza links (`(libraries core syntax ml js_of_ocaml)`), while
+# `js_of_ocaml-compiler` provides the binary that generate_cmijs.mjs shells out
+# to for `build-fs`. Installing only the latter builds fine on a machine that
+# happens to have the former already, and fails on a clean one.
+install_deps() {
+  if opam install . --deps-only --with-test --yes; then
+    return 0
+  fi
+  echo "==> --with-test failed (usually binaryen/wasm_of_ocaml on a broken C++"
+  echo "    toolchain); retrying without it and taking js_of_ocaml by name"
+  opam install . --deps-only --yes &&
+    opam install js_of_ocaml js_of_ocaml-compiler --yes
+}
+
 active_ocaml="$(ocamlc -version 2>/dev/null || true)"
 
 use_local_switch=1
@@ -432,33 +458,6 @@ fi
 
 if [ "${deps_installed}" = "0" ]; then
   install_deps
-fi
-
-# macOS: an old Command Line Tools install can leave a stale libc++ at
-# /Library/Developer/CommandLineTools/usr/include/c++/v1 that *shadows* the
-# current headers in the SDK. clang searches the stale one first and every C++
-# build then dies on a basic header:
-#   fatal error: 'cstdio' file not found     (ninja's bootstrap)
-#   fatal error: 'mutex' file not found      (binaryen, via wasm_of_ocaml)
-# The SDK copy is fine, so point at it explicitly rather than skipping the
-# build: ReScript vendors a *forked* ninja (its lexer accepts `o` as a synonym
-# for `build`), so a system ninja cannot stand in -- it rejects the generated
-# build.ninja with "expected '=', got identifier".
-#
-# The real fix is reinstalling the Command Line Tools; this only gets the build
-# through on a machine that has not.
-if [ "$(uname)" = "Darwin" ]; then
-  sdk_path="$(xcrun --show-sdk-path 2>/dev/null || true)"
-  clt_cxx="/Library/Developer/CommandLineTools/usr/include/c++/v1"
-  # __sso_allocator was removed from libc++ years ago; its presence marks the
-  # stale tree. Absent that, leave a healthy toolchain alone.
-  if [ -n "${sdk_path}" ] && [ -f "${clt_cxx}/__sso_allocator" ] &&
-     [ -d "${sdk_path}/usr/include/c++/v1" ]; then
-    export CXXFLAGS="-isystem ${sdk_path}/usr/include/c++/v1 ${CXXFLAGS:-}"
-    echo "==> stale Command Line Tools libc++ detected; using the SDK headers instead"
-    echo "    (consider reinstalling: sudo rm -rf /Library/Developer/CommandLineTools"
-    echo "     && sudo xcode-select --install)"
-  fi
 fi
 
 # `make playground` = playground-compiler (dune --profile browser, jsoo) plus
