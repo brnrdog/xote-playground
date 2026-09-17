@@ -1,23 +1,49 @@
 # Authoring playground snippets
 
-## The PPX is not available
+## `@xote.component` works here
 
-`@xote.component` is a native OCaml binary in the xote repo (`ppx/bin`). The
-browser compiler has no PPX hook, so **no playground snippet may use it.**
+The rewriter is compiled into the playground compiler itself, so snippets are
+written the way real xote code is written — no hand-rolled thunks.
 
-This is the single biggest difference between playground code and the examples
-in `docs-website/`, and it is not a temporary limitation — it follows from the
-playground compiler being a `js_of_ocaml` build with no process to shell out to.
+This is not how a ReScript ppx normally runs. Normally the *build system* runs a
+ppx binary between parse and compile, handing it a marshalled parsetree; the
+playground compiler has no such seam, since its whole API is
+`compile(source) -> js`. So xote's rewriter is linked into the compiler and
+called on the parsed structure, immediately before ReScript's own
+`Ppx_entry.rewrite_implementation` (which is what lowers JSX — order matters,
+and it matches what a native `ppx <ast-in> <ast-out>` invocation sees).
 
-Practically, write the reactive parts by hand:
+See `scripts/build-bundle.sh` step 2b. The consequence is that the bundle must
+be built from source: a stock bundle from `cdn.rescript-lang.org` has no ppx.
 
-| With the PPX (docs-website)      | In the playground                          |
-|----------------------------------|--------------------------------------------|
-| `{Signal.get(count)}` as a child | `View.signalText(() => ...)` — takes a **thunk** |
-| bare `{"text"}` child            | `View.text("text")`                         |
-| `<View.Int>` via bare child      | `View.signalInt(() => Signal.get(count))`   |
-| `class={"x " ++ Signal.get(s)}`  | `View.Attr.compute("class", () => "x " ++ Signal.get(s))` |
-| `onClick={handler}`              | `~events=[("click", handler)]`              |
+## Every snippet needs the jsx config header
+
+```rescript
+@@jsxConfig({version: 4, module_: "XoteJSX"})
+```
+
+The playground API has no JSX-module setting, so it has to come from the source.
+`Xote` is opened for you (`setOpenModules(["Xote"])`), so `View`, `Signal` and
+`XoteJSX` are all in scope without an explicit `open`.
+
+## `make` is the entry point
+
+The runner mounts `make({})`. `@xote.component` derives props, so an annotated
+component compiles to a function taking a props object while a plain one takes
+unit; the empty object satisfies the first and is ignored by the second. A
+component that declares props (`~label: string`) will see them as `undefined`,
+so starter snippets should not require any.
+
+## Writing reactivity by hand
+
+Still supported, and necessary inside a plain (un-annotated) function:
+
+| With `@xote.component`           | By hand                                     |
+|----------------------------------|---------------------------------------------|
+| `{Signal.get(count)}` as a child | `View.signalInt(() => Signal.get(count))`   |
+| bare `{"text"}` child            | `View.text("text")`                          |
+| `class={... Signal.get(s) ...}`  | `View.Attr.compute("class", () => ...)`      |
+| `onClick={handler}`              | `~events=[("click", handler)]`               |
 
 ### `View.element` is fully labelled and ends in `unit`
 
@@ -30,47 +56,3 @@ View.element(
   (),
 )
 ```
-
-Children are `~children`, not positional — passing the array positionally
-type-errors against the trailing `unit`. And `View.mount` is `(node, element)`,
-node first.
-
-## JSX needs a file-level attribute
-
-The playground compiler hardcodes JSX v4 with the **React** transform, and
-exposes no way to change it: `jsoo_playground_main.ml` (v12.3.1) offers only
-`setModuleSystem`, `setFilename`, `setWarnFlags`, `setOpenModules`,
-`setExperimentalFeatures` and `setJsxPreserveMode`. There is no `setConfig` and
-no JSX-module knob.
-
-The escape hatch is the file-level attribute, which the compile worker prepends
-automatically unless a snippet declares its own:
-
-```rescript
-@@jsxConfig({version: 4, module_: "XoteJSX"})
-```
-
-So JSX does work in the playground — just not via configuration. A snippet that
-wants different JSX settings should write its own `@@jsxConfig` line.
-
-## Every snippet exports `make`
-
-The runner bootstraps with `View.mount(root, make())`. A snippet must therefore
-define a top-level `make: unit => View.node`. Anything else compiles but renders
-nothing.
-
-## The module surface
-
-Snippets compile with `-open Xote`, so `View`, `Signal`, `Computed`, `Effect`,
-`MaybeSignal`, `Html`, `Route`, `Router` and the rest of the public API are in
-scope unqualified — the same as `docs-website/rescript.json`'s `compiler-flags`.
-
-`SSR`, `SSRState` and `Hydration` are in the bundle but not useful in the
-playground: there is no server. `Router` works, but navigation is scoped to the
-sandboxed iframe.
-
-## Keeping snippets in sync with xote
-
-The bundle pins one xote version (`bundle/xote.version`). A snippet that uses an
-API added after that version will fail to compile with a confusing "unbound
-value" error. When xote releases, bump the pin and let CI rebuild.

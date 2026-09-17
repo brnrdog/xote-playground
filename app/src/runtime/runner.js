@@ -15,16 +15,33 @@ const BOOTSTRAP = `
   const root = document.getElementById("root")
   try {
     // View.mount is (node, element) — node first. See src/View.resi.
-    View.mount(make(), root)
+    //
+    // make({}) rather than make(): @xote.component derives props, so an
+    // annotated component compiles to a function taking a props object, while
+    // a plain one takes unit. An empty object satisfies the first and is
+    // ignored by the second, so one call site serves both.
+    // (No backticks in here: this whole string is a template literal.)
+    View.mount(make({}), root)
   } catch (err) {
     parent.postMessage({ type: "runtime-error", text: String(err?.stack ?? err) }, "*")
   }
 `
 
+// The manifest is fetched once and cached: it changes only when `npm run
+// vendor` re-runs, never during a session.
+let manifestPromise = null
+function loadManifest() {
+  manifestPromise ??= fetch('/vendor/manifest.json')
+    .then(res => (res.ok ? res.json() : {}))
+    .catch(() => ({}))
+  return manifestPromise
+}
+
 export function createRunner(container) {
   let frame = null
 
-  function run(js) {
+  async function run(js) {
+    const manifest = await loadManifest()
     if (frame) frame.remove()
 
     frame = document.createElement('iframe')
@@ -33,8 +50,8 @@ export function createRunner(container) {
     frame.setAttribute('sandbox', 'allow-scripts')
     frame.title = 'Preview'
 
-    const snippet = rewriteImports(js, location.origin)
-    const bootstrap = rewriteImports(BOOTSTRAP, location.origin)
+    const snippet = rewriteImports(js, location.origin, undefined, manifest)
+    const bootstrap = rewriteImports(BOOTSTRAP, location.origin, undefined, manifest)
 
     frame.srcdoc = `<!doctype html>
 <html>

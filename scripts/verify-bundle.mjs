@@ -57,4 +57,46 @@ if (!result.js_code.includes('View')) {
   process.exit(1)
 }
 
-console.log('Bundle verified: xote snippet compiled.')
+// Deliberately ONE child: multi-child JSX with a custom jsx module raises
+// Not_found inside the playground compiler. That is an upstream bug, present in
+// the stock 12.3.1 bundle from cdn.rescript-lang.org too, and nothing to do with
+// the ppx -- but it would masquerade as a ppx failure here.
+//
+// The @xote.component PPX is linked into the compiler (see build-bundle.sh
+// step 2b). Verify it actually ran, because the failure mode is silent: an
+// unexpanded @xote.component is a no-op attribute that ReScript drops without
+// a warning, leaving code that compiles fine and is simply not reactive.
+const PPX_SNIPPET = `
+@@jsxConfig({version: 4, module_: "XoteJSX"})
+
+@xote.component
+let make = () => {
+  let count = Signal.make(0)
+  <div class={Signal.get(count) > 0 ? "on" : "off"}> {Signal.get(count)} </div>
+}
+`
+
+const ppx = compiler.rescript.compile(PPX_SNIPPET)
+
+if (ppx.type !== 'success') {
+  console.error('Bundle failed to compile an @xote.component snippet:')
+  console.error(JSON.stringify(ppx, null, 2))
+  console.error()
+  console.error('A type error naming `element` usually means the ppx did NOT run:')
+  console.error('without it, {label} and {Signal.get(count)} are never wrapped in')
+  console.error('View.child, so a string/int lands where a node is expected.')
+  process.exit(1)
+}
+
+// The signature of a real expansion: reactive leaves become thunks. Without the
+// ppx the same source either fails to type-check or emits plain values.
+for (const marker of ['View', 'child', '=>']) {
+  if (!ppx.js_code.includes(marker)) {
+    console.error(`@xote.component compiled, but emitted code lacks ${marker} —`)
+    console.error('the attribute was dropped rather than expanded.')
+    console.error(ppx.js_code)
+    process.exit(1)
+  }
+}
+
+console.log('Bundle verified: xote snippet compiled, @xote.component expanded.')
