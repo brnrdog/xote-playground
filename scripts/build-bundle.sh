@@ -71,7 +71,13 @@ cd "${COMPILER}"
 corepack enable
 yarn install --no-immutable   # --no-immutable: we just edited two manifests
 
-opam install . --deps-only --yes
+# --with-test is load-bearing, not a nicety: rescript.opam declares js_of_ocaml
+# (and wasm_of_ocaml-compiler) under `with-test`, so a plain --deps-only leaves
+# jsoo uninstalled and `make playground` dies with
+#   Program js_of_ocaml not found in the tree or in PATH
+# The opam file also pin-depends flow_parser on a git fork, which opam resolves
+# from the pin — so install from this directory, not by package name.
+opam install . --deps-only --with-test --yes
 
 # `make playground` = playground-compiler (dune --profile browser, jsoo) plus
 # playground-cmijs (`yarn workspace playground build`, which runs

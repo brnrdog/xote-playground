@@ -110,3 +110,10 @@ Notes from reading that tree, in case the build surprises you:
   build script edits that manifest.
 - The playground API has **no `setConfig`** and no JSX-module setting — see
   `docs/authoring-snippets.md`.
+- `js_of_ocaml` is declared **`with-test`** in `rescript.opam`, so the deps
+  install needs `--with-test` or `make playground` fails with
+  `Program js_of_ocaml not found in the tree or in PATH`.
+- Needs **OCaml >= 5.0**; upstream CI builds the playground on 5.3.0, which is
+  what `.github/workflows/bundle.yml` uses.
+- `rescript.opam` `pin-depends` a `flow_parser` git fork, so deps must be
+  installed from the checkout directory (`opam install .`), not by package name.

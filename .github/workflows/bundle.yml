@@ -26,9 +26,10 @@ jobs:
 
       - uses: ocaml/setup-ocaml@v3
         with:
-          # Must satisfy the pinned compiler's opam constraints; see its
-          # dune-project. Bump alongside bundle/rescript.version.
-          ocaml-compiler: '5.2'
+          # rescript.opam requires ocaml >= 5.0.0; upstream CI builds the
+          # playground on 5.3.0, so match that rather than guessing lower.
+          # Bump alongside bundle/rescript.version.
+          ocaml-compiler: '5.3.0'
 
       - name: Build bundle
         run: ./scripts/build-bundle.sh
