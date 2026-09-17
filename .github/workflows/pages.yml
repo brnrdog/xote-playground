@@ -41,6 +41,13 @@ jobs:
         with:
           ocaml-compiler: '5.3.0'
 
+      # build-bundle.sh reads xote's ppx sources out of node_modules (step 2b
+      # links them into the compiler), so the runtime deps have to be present
+      # before it runs -- not just before `npm run setup`. npm install rather
+      # than npm ci: there is no committed package-lock.json.
+      - name: Install runtime deps
+        run: npm install
+
       - name: Build compiler bundle
         run: ./scripts/build-bundle.sh
 
