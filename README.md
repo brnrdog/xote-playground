@@ -40,11 +40,12 @@ These are load-bearing; read them before changing the design.
   ReScript's frozen ppx parsetree (`compiler/ml/parsetree0.ml`). See
   `scripts/build-bundle.sh` step 2b. **A stock bundle from
   `cdn.rescript-lang.org` has no ppx** — it must be built from source.
-- **Sibling JSX children raise `Not_found`.** With a custom `jsx.module`, two or
-  more JSX children break the playground compiler. This is upstream — the stock
-  12.3.1 bundle fails identically, with or without the ppx — and the workaround
-  is one child holding an explicit `XoteJSX.array([...])`. See
-  `docs/authoring-snippets.md`.
+- **A cmij must carry a package's private modules, not just its public ones.**
+  bsb copies only the modules listed under `public` into `lib/ocaml`; the rest
+  stay in `lib/bs/src`. A native build sees both, the playground sees only the
+  cmij, and the compiler backend raises a bare `Not_found` the moment it needs a
+  missing one. That is why multi-child JSX used to fail: `XoteJSX.array` reaches
+  xote's private `Runtime*` modules. `build-bundle.sh` step 2c packs both.
 - **The bundle pins one xote version.** Every xote release that changes the public
   API needs a bundle rebuild. That is what `.github/workflows/bundle.yml` is for.
 - **Emitted code imports bare specifiers** (`rescript/lib/es6/...`,

@@ -279,6 +279,53 @@ if "(modes js wasm)" not in s:
 p.write_text(s.replace("(modes js wasm)", "(modes js)", 1))
 DUNEPY
 
+# ---------------------------------------------------------------------------
+# 2c. Let cmijs carry a package's private modules too
+#
+# generate_cmijs.mjs packs <pkg>/lib/ocaml, but bsb copies only the modules a
+# package lists under `public` there; everything else stays in lib/bs/src. A
+# native build sees both, so the compiler can always load cross-module info for
+# a private module. The playground sees only what the cmij holds, and when the
+# backend reaches for a missing one it raises a bare `Not_found` with no
+# location -- which is what made every multi-child JSX element fail, since
+# XoteJSX.array reaches xote's private Runtime* modules.
+#
+# Packing lib/bs/src as well makes the cmij mirror a native lib/ocaml. It does
+# mean a private module becomes *nameable* in a snippet (its .cmi has to be
+# there for the backend to work); its values still are not, and `public` is left
+# alone so nothing else about the package changes.
+# ---------------------------------------------------------------------------
+python3 - "${PLAYGROUND}/scripts/generate_cmijs.mjs" <<'CMIJPY'
+import sys, pathlib
+p = pathlib.Path(sys.argv[1]); s = p.read_text()
+if "lib/bs/src" in s:
+    sys.exit(0)
+needle = """  const libOcamlFolder = path.join(
+    pkgDir,
+    "lib",
+    "ocaml",
+  );
+"""
+if needle not in s:
+    sys.exit("generate_cmijs.mjs: buildCmij layout changed; cannot add private modules")
+addition = needle + """
+  // Private modules (anything outside the package's `public` list) are not
+  // copied to lib/ocaml by bsb -- they stay in lib/bs/src. The playground
+  // backend still needs them, so fold them in before packing.
+  const bsFolder = path.join(pkgDir, "lib", "bs", "src");
+  if (fs.existsSync(bsFolder)) {
+    for (const f of fs.readdirSync(bsFolder)) {
+      if (!isCmij(f)) continue;
+      const dest = path.join(libOcamlFolder, f);
+      if (!fs.existsSync(dest)) fs.copyFileSync(path.join(bsFolder, f), dest);
+    }
+  }
+"""
+p.write_text(s.replace(needle, addition, 1))
+CMIJPY
+
+echo "==> cmij generation extended to private modules"
+
 echo "==> xote ppx linked into the playground compiler"
 
 # ---------------------------------------------------------------------------

@@ -16,33 +16,6 @@ and it matches what a native `ppx <ast-in> <ast-out>` invocation sees).
 See `scripts/build-bundle.sh` step 2b. The consequence is that the bundle must
 be built from source: a stock bundle from `cdn.rescript-lang.org` has no ppx.
 
-## Sibling JSX children need `XoteJSX.array`
-
-**This is the one real constraint on snippet style.**
-
-```rescript
-// Raises Not_found in the playground compiler:
-<div>
-  <span> {View.text("a")} </span>
-  {Signal.get(count)}
-</div>
-
-// Works — one child, an explicit array:
-<div>
-  {XoteJSX.array([
-    <span> {View.text("a")} </span>,
-    View.child(() => Signal.get(count)),
-  ])}
-</div>
-```
-
-Two or more JSX children with a custom `jsx.module` make the playground
-compiler raise `Not_found`. It is **upstream and unrelated to the ppx** —
-the stock ReScript 12.3.1 bundle from `cdn.rescript-lang.org` fails the same
-way, with or without `@xote.component`. A single child is fine, and
-`XoteJSX.array` called directly is fine; only the implicit multi-child path
-breaks.
-
 ## Every snippet needs the jsx config header
 
 ```rescript
