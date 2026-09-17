@@ -1,0 +1,66 @@
+# xote-playground
+
+In-browser ReScript playground for [xote](https://github.com/brnrdog/xote).
+
+Two things live here:
+
+1. **`bundle/`** — the build that produces a custom ReScript playground compiler
+   (`compiler.js` + a `cmij` set) with `xote` and `rescript-signals` baked in, so
+   playground code can `open Xote` and use `View` / `Signal` / `XoteJSX`.
+2. **`app/`** — the playground UI: a CodeMirror editor, a compile worker, and a
+   sandboxed iframe that runs the emitted JavaScript.
+
+It is deliberately a separate repository from `brnrdog/xote`: the bundle build
+needs an OCaml toolchain and a checkout of the ReScript compiler, which has no
+business in the library's CI.
+
+## Why a custom bundle
+
+ReScript's browser compiler is a `js_of_ocaml` build of the compiler
+(`compiler.js`) plus `cmij` archives holding the `.cmi`/`.cmj` artifacts of every
+module the playground can compile against. It is **not published to npm** — the
+`rescript` package ships only native binaries and CLI wrappers (verified against
+`rescript@12.3.1`: 22 files, no playground artifact). The official playground
+loads its bundle from `cdn.rescript-lang.org`, and that bundle knows the stdlib
+plus `@rescript/react` — not xote.
+
+So compiling xote code in the browser means building our own bundle, the same way
+rescript-lang.org builds theirs, with xote's artifacts added to the cmij set.
+
+## Known constraints
+
+These are load-bearing; read them before changing the design.
+
+- **`@xote.component` cannot run in the browser.** The PPX is a native OCaml
+  executable (`ppx/bin` in the xote repo). The playground compiler has no PPX
+  hook, so **playground snippets must be PPX-free**: explicit `() => ...` thunks,
+  `View.signalText`, `<View.Int>` and friends. Most examples in `docs-website/`
+  are PPX-style and will not paste in unchanged. See `docs/authoring-snippets.md`.
+- **The bundle pins one xote version.** Every xote release that changes the public
+  API needs a bundle rebuild. That is what `.github/workflows/bundle.yml` is for.
+- **Emitted code imports bare specifiers** (`rescript/lib/es6/...`,
+  `xote/src/View.res.mjs`). The runner rewrites these to real URLs before
+  execution — see `app/src/runtime/rewrite.js`.
+- **Untrusted code runs in a sandboxed iframe**, never in the host page, so a
+  runaway effect or an infinite loop can be killed by replacing the frame.
+
+## Layout
+
+```
+bundle/
+  rescript.version        pinned ReScript compiler tag
+  xote.version            pinned xote version baked into the cmij set
+scripts/
+  build-bundle.sh         builds compiler.js + cmij (needs OCaml + opam)
+  verify-bundle.mjs       smoke-test: compile a xote snippet headlessly
+app/
+  src/                    editor, compile worker, iframe runner
+docs/
+  authoring-snippets.md   what is and isn't allowed in playground code
+```
+
+## Status
+
+Scaffold. `scripts/build-bundle.sh` encodes the intended pipeline but has **not
+been executed end to end** — see the TODO markers in it for the two steps that
+need verifying against the pinned compiler checkout.

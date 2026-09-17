@@ -1,0 +1,6 @@
+node_modules/
+.work/
+dist/
+app/build/
+app/public/bundle/
+app/public/vendor/
