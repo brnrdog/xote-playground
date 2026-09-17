@@ -32,6 +32,16 @@ try {
   process.exit(1)
 }
 
+// An empty dist/ means the build aborted, not that the bundle is malformed.
+// Saying "incomplete bundle" there sends people looking in the wrong place.
+const { readdir } = await import('node:fs/promises')
+if ((await readdir(from)).length === 0) {
+  console.error(`${from} is empty — the build did not finish.`)
+  console.error('Re-run ./scripts/build-bundle.sh and read the first error it prints;')
+  console.error('the failure is upstream of this script.')
+  process.exit(1)
+}
+
 const missing = []
 for (const file of REQUIRED) {
   try {

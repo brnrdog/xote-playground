@@ -23,8 +23,22 @@ XOTE_VERSION="$(tr -d '[:space:]' < "${ROOT}/bundle/xote.version")"
 echo "==> ReScript compiler: v${RESCRIPT_VERSION}"
 echo "==> xote:              ${XOTE_VERSION}"
 
+# dist/ is created only in step 4, once there is something to put in it. A
+# half-built dist/ is worse than none: install-bundle.mjs would report it as an
+# "incomplete bundle" and bury the build error that actually caused it.
 rm -rf "${WORK}" "${DIST}"
-mkdir -p "${WORK}" "${DIST}"
+mkdir -p "${WORK}"
+
+STAGE="${WORK}/stage"
+
+on_error() {
+  local line=$1
+  echo >&2
+  echo "==> BUILD FAILED at ${0}:${line}" >&2
+  echo "    Nothing was written to ${DIST}; the error above is the real one." >&2
+  echo "    The compiler checkout is left at ${COMPILER:-${WORK}/rescript} for inspection." >&2
+}
+trap 'on_error $LINENO' ERR
 
 # ---------------------------------------------------------------------------
 # 1. Check out the pinned ReScript compiler
@@ -87,8 +101,36 @@ make playground
 # ---------------------------------------------------------------------------
 # 4. Collect
 # ---------------------------------------------------------------------------
-cp "${PLAYGROUND}/compiler.js" "${DIST}/compiler.js"
-cp -R "${PLAYGROUND}/packages" "${DIST}/packages"
+# Stage first, then move into place, so an interrupted collect cannot leave a
+# partial dist/ behind either.
+rm -rf "${STAGE}"
+mkdir -p "${STAGE}"
+
+for artifact in compiler.js packages; do
+  if [ ! -e "${PLAYGROUND}/${artifact}" ]; then
+    echo >&2 "==> BUILD INCOMPLETE: make playground did not produce ${PLAYGROUND}/${artifact}"
+    exit 1
+  fi
+done
+
+cp "${PLAYGROUND}/compiler.js" "${STAGE}/compiler.js"
+cp -R "${PLAYGROUND}/packages" "${STAGE}/packages"
+
+for required in \
+  compiler.js \
+  packages/compiler-builtins/cmij.js \
+  packages/rescript-signals/cmij.js \
+  packages/xote/cmij.js
+do
+  if [ ! -f "${STAGE}/${required}" ]; then
+    echo >&2 "==> BUILD INCOMPLETE: ${required} was not generated."
+    echo >&2 "    Check that packages/playground/rescript.json lists the dependency"
+    echo >&2 "    and that <compiler>/node_modules/<pkg>/lib/ocaml exists."
+    exit 1
+  fi
+done
+
+mv "${STAGE}" "${DIST}"
 
 echo "==> bundle written to ${DIST}"
 find "${DIST}" -name 'cmij.js' | sort
