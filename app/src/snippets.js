@@ -20,11 +20,8 @@ export const SNIPPETS = [
     blurb: 'Signals and events',
     code: `${HEADER}
 
-// @xote.component decomposes this into fine-grained reactive leaves: the
-// element structure is built once, and only the parts that depend on a signal
-// re-run. A signal goes straight into JSX — {count} is the whole subscription,
-// no Signal.get and no thunk — while class="counter" stays a plain string in
-// the output.
+// A signal goes straight into JSX: {count} is the whole subscription — no
+// Signal.get, no thunk — and only that text node updates when it changes.
 
 @xote.component
 let make = () => {
@@ -101,9 +98,8 @@ let make = () => {
     blurb: 'Switching on state',
     code: `${HEADER}
 
-// Control flow that produces *nodes* is the one place a structural swap is
-// unavoidable, so the ppx wraps it in View.tracked. Attributes and text leaves
-// around it stay fine-grained.
+// A signal that chooses between nodes has to be read with Signal.get: the
+// branch is picked, not rendered.
 
 @xote.component
 let make = () => {
@@ -135,8 +131,7 @@ let make = () => {
 //
 // \`each\` is a typed prop, so it takes MaybeSignal.reactive(items) rather than
 // the bare signal — that wrapper is how a declared prop says which one it is
-// being handed. \`render\` returns a node, so the ppx decomposes its body like
-// any other JSX and the leaves inside a row stay fine-grained.
+// being handed.
 
 type item = {id: int, label: string}
 
