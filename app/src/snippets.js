@@ -102,10 +102,8 @@ let make = () => {
     code: `${HEADER}
 
 // Control flow that produces *nodes* is the one place a structural swap is
-// unavoidable, so the ppx wraps it in View.tracked. This is also where the
-// explicit Signal.get comes back: the signal is not being rendered, it is
-// choosing which branch renders, so it has to be read. Attributes and text
-// leaves around it stay fine-grained.
+// unavoidable, so the ppx wraps it in View.tracked. Attributes and text leaves
+// around it stay fine-grained.
 
 @xote.component
 let make = () => {
