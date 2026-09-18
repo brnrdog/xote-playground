@@ -12,7 +12,8 @@
     "dev": "npm --prefix app run dev",
     "build": "npm --prefix app run build",
     "preview": "npm --prefix app run preview",
-    "test": "node app/src/runtime/rewrite.test.mjs"
+    "test": "node app/src/runtime/rewrite.test.mjs",
+    "test:snippets": "node scripts/verify-snippets.mjs"
   },
   "dependencies": {
     "rescript": "12.3.1",

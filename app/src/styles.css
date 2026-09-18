@@ -1,69 +1,90 @@
-:root {
-  --pg-bg: #ffffff;
-  --pg-fg: #16181d;
-  --pg-muted: #6b7280;
-  --pg-border: #e5e7eb;
-  --pg-error: #b42318;
-  --pg-ok: #067647;
+@import 'tailwindcss';
+/* Lives in public/ so the sandboxed preview can load it as a plain stylesheet:
+   it is a separate document and cannot reach anything under src/. Imported here
+   by path so Vite inlines it into the app bundle. */
+@import '../public/theme.css';
+
+/**
+ * `inline` matters here: it makes the generated utilities emit `var(--bg)`
+ * rather than a baked hex, so every Tailwind class follows the `data-theme`
+ * flip without a rebuild or a re-render.
+ */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-elevated: var(--elevated);
+  --color-line: var(--border);
+  --color-line-soft: var(--border-soft);
+
+  --color-fg: var(--text);
+  --color-muted: var(--text-muted);
+  --color-faint: var(--text-faint);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-error: var(--error);
+
+  --font-display: var(--font-display);
+  --font-body: var(--font-body);
+  --font-mono: var(--font-mono);
+
+  /* xote.dev is square throughout; rounded corners read as a different brand. */
+  --radius-none: 0px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --pg-bg: #0f1115;
-    --pg-fg: #e6e8eb;
-    --pg-muted: #9aa2ad;
-    --pg-border: #262b33;
-    --pg-error: #f97066;
-    --pg-ok: #47cd89;
+@layer base {
+  html {
+    /* Keeps form controls and scrollbars in step with the token palette. */
+    color-scheme: dark;
+  }
+
+  html[data-theme='light'] {
+    color-scheme: light;
+  }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 14px;
+    line-height: var(--lh-ui);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background: var(--syntax-warm);
+    color: var(--bg);
   }
 }
 
-* { box-sizing: border-box; }
+@layer components {
+  /**
+   * CodeMirror's own DOM is created outside our markup, so it cannot be styled
+   * with utility classes. These few rules hand it the tokens; everything else
+   * about the editor's look lives in the theme extension (src/editor/theme.js).
+   */
+  .cm-editor {
+    height: 100%;
+    background: var(--bg);
+  }
 
-body {
-  margin: 0;
-  background: var(--pg-bg);
-  color: var(--pg-fg);
-  font: 14px/1.5 ui-sans-serif, system-ui, sans-serif;
-}
+  .cm-editor.cm-focused {
+    outline: none;
+  }
 
-.pg-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--pg-border);
-}
+  .cm-scroller {
+    font-family: var(--font-mono);
+    line-height: var(--lh-prose);
+  }
 
-.pg-title { font-weight: 600; }
-
-.pg-status { color: var(--pg-muted); font-size: 13px; margin-left: auto; }
-.pg-status[data-tone='error'] { color: var(--pg-error); }
-.pg-status[data-tone='ok'] { color: var(--pg-ok); }
-
-.pg-split {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  height: calc(100dvh - 45px);
-}
-
-@media (max-width: 720px) {
-  .pg-split { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
-}
-
-.pg-editor { overflow: auto; border-right: 1px solid var(--pg-border); }
-.pg-editor .cm-editor { height: 100%; }
-
-.pg-output { display: flex; flex-direction: column; min-height: 0; }
-.pg-output iframe { flex: 1; border: 0; width: 100%; background: var(--pg-bg); }
-
-.pg-errors {
-  margin: 0;
-  max-height: 40%;
-  overflow: auto;
-  padding: 12px 16px;
-  border-top: 1px solid var(--pg-border);
-  color: var(--pg-error);
-  font: 12px/1.6 ui-monospace, monospace;
-  white-space: pre-wrap;
+  /* The runner creates this iframe itself, so it cannot carry utility classes. */
+  .pg-output iframe {
+    flex: 1 1 auto;
+    width: 100%;
+    border: 0;
+    background: var(--bg);
+  }
 }

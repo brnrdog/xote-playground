@@ -56,6 +56,11 @@ jobs:
       - name: Verify bundle
         run: node scripts/verify-bundle.mjs
 
+      # The snippets are the playground's documentation and they are compiled
+      # against the bundle that was just built, so a broken example cannot ship.
+      - name: Verify snippets compile
+        run: npm run test:snippets
+
       - name: Install app deps, vendor runtime, install bundle
         run: npm run setup
 
