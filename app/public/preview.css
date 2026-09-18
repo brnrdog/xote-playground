@@ -75,3 +75,39 @@ button:focus-visible {
   font-size: 18px;
   color: var(--syntax-warm);
 }
+
+.list {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.list .rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.list .row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 220px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.list .row button {
+  padding: 2px 8px;
+  color: var(--text-faint);
+}
+
+.list .row button:hover {
+  color: var(--text);
+}

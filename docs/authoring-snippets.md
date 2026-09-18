@@ -34,16 +34,44 @@ unit; the empty object satisfies the first and is ignored by the second. A
 component that declares props (`~label: string`) will see them as `undefined`,
 so starter snippets should not require any.
 
+## Pass the signal, not the read
+
+Under `@xote.component`, a signal can be handed straight to JSX wherever a value
+is expected — as a child, or as an attribute on an intrinsic element:
+
+```rescript
+<div class={theme}> {count} </div>
+```
+
+That is the short form of `class={Signal.get(theme)}` and `{Signal.get(count)}`,
+and it produces the same single reactive leaf: the short form gives `View.child`
+(or the attribute) the signal itself, the long one a thunk around the read.
+Prefer it — the snippets are what people copy.
+
+`Signal.get` is still the right call in three places, and the snippets use it
+there:
+
+- the value is *derived* rather than passed through —
+  `{Array.length(Signal.get(items))}`
+- control flow picks between nodes — `if Signal.get(open_) {...}`, where that
+  read is what the `View.tracked` block subscribes to
+- ordinary code outside JSX, such as an `Effect.run` body
+
+Typed props are the other exception: `View.For`, `View.Show` and friends declare
+`MaybeSignal.t`, so they take `MaybeSignal.reactive(items)` — the wrapper is how
+a declared prop says which of the two it is being handed.
+
 ## Writing reactivity by hand
 
 Still supported, and necessary inside a plain (un-annotated) function:
 
-| With `@xote.component`           | By hand                                     |
-|----------------------------------|---------------------------------------------|
-| `{Signal.get(count)}` as a child | `View.signalInt(() => Signal.get(count))`   |
-| bare `{"text"}` child            | `View.text("text")`                          |
-| `class={... Signal.get(s) ...}`  | `View.Attr.compute("class", () => ...)`      |
-| `onClick={handler}`              | `~events=[("click", handler)]`               |
+| With `@xote.component`          | By hand                                   |
+|---------------------------------|-------------------------------------------|
+| `{count}` — a signal child      | `View.signalInt(() => Signal.get(count))` |
+| bare `{"text"}` child           | `View.text("text")`                       |
+| `class={theme}` — a signal attr | `View.Attr.compute("class", () => ...)`   |
+| `onClick={handler}`             | `~events=[("click", handler)]`            |
+| `<View.For each by render />`   | `View.eachWithKey(signal, keyFn, render)` |
 
 ### `View.element` is fully labelled and ends in `unit`
 
