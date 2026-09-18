@@ -123,6 +123,61 @@ let make = () => {
 }
 `,
   },
+  {
+    id: 'list',
+    label: 'List',
+    blurb: 'Keyed collections',
+    code: `${HEADER}
+
+// View.For renders a collection. \`by\` gives each item a stable key, so the
+// reconciler moves only the rows a change displaces: removing one leaves its
+// neighbours' DOM nodes untouched, and reversing reuses every <li> rather than
+// rebuilding the list. Without \`by\` the whole list re-renders on every change.
+//
+// \`render\` returns a node, so the ppx decomposes its body like any other JSX
+// and the leaves inside a row stay fine-grained.
+
+type item = {id: int, label: string}
+
+@xote.component
+let make = () => {
+  let nextId = ref(4)
+  let items = Signal.make([
+    {id: 1, label: "signals"},
+    {id: 2, label: "effects"},
+    {id: 3, label: "keyed lists"},
+  ])
+
+  let add = _ => {
+    let id = nextId.contents
+    nextId := id + 1
+    Signal.update(items, xs => Array.concat(xs, [{id, label: "item " ++ Int.toString(id)}]))
+  }
+
+  let reverse = _ => Signal.update(items, xs => Array.toReversed(xs))
+  let remove = id => Signal.update(items, xs => Array.filter(xs, x => x.id != id))
+
+  <div class="list">
+    <div class="counter">
+      <button onClick={add}> {View.text("add")} </button>
+      <button onClick={reverse}> {View.text("reverse")} </button>
+      <span class="value"> {Array.length(Signal.get(items))} </span>
+    </div>
+    <ul class="rows">
+      <View.For
+        each={MaybeSignal.reactive(items)}
+        by={item => Int.toString(item.id)}
+        render={item =>
+          <li class="row">
+            <span> {View.text(item.label)} </span>
+            <button onClick={_ => remove(item.id)}> {View.text("remove")} </button>
+          </li>}
+      />
+    </ul>
+  </div>
+}
+`,
+  },
 ]
 
 export const DEFAULT_SNIPPET = SNIPPETS[0].code

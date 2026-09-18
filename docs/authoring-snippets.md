@@ -44,6 +44,7 @@ Still supported, and necessary inside a plain (un-annotated) function:
 | bare `{"text"}` child            | `View.text("text")`                          |
 | `class={... Signal.get(s) ...}`  | `View.Attr.compute("class", () => ...)`      |
 | `onClick={handler}`              | `~events=[("click", handler)]`               |
+| `<View.For each by render />`    | `View.eachWithKey(signal, keyFn, render)`   |
 
 ### `View.element` is fully labelled and ends in `unit`
 
