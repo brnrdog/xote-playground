@@ -3,7 +3,8 @@
  *
  * @xote.component works here — the rewriter is linked into the playground
  * compiler itself (scripts/build-bundle.sh step 2b) — so these are written the
- * way real xote code is: plain JSX, signals read inline, no hand-rolled thunks.
+ * way real xote code is: plain JSX, signals passed straight into it, no
+ * hand-rolled thunks and no Signal.get where the signal itself will do.
  *
  * Every snippet is compiled by `npm run test:snippets` against the real bundle.
  * They are documentation, and documentation that does not compile is worse than
@@ -20,18 +21,19 @@ export const SNIPPETS = [
     code: `${HEADER}
 
 // @xote.component decomposes this into fine-grained reactive leaves: the
-// element structure is built once, and only the parts that read a signal
-// re-run. class="counter" stays a plain string in the output, while
-// {Signal.get(count)} becomes View.child(() => ...).
+// element structure is built once, and only the parts that depend on a signal
+// re-run. A signal goes straight into JSX — {count} is the whole subscription,
+// no Signal.get and no thunk — while class="counter" stays a plain string in
+// the output.
 
 @xote.component
 let make = () => {
   let count = Signal.make(0)
 
   <div class="counter">
-    <button onClick={_ => Signal.update(count, n => n - 1)}> {View.text("-")} </button>
-    <span class="value"> {Signal.get(count)} </span>
-    <button onClick={_ => Signal.update(count, n => n + 1)}> {View.text("+")} </button>
+    <button onClick={_ => Signal.update(count, n => n - 1)}> {"-"} </button>
+    <span class="value"> {count} </span>
+    <button onClick={_ => Signal.update(count, n => n + 1)}> {"+"} </button>
   </div>
 }
 `,
@@ -42,9 +44,9 @@ let make = () => {
     blurb: 'Computed values',
     code: `${HEADER}
 
-// Computed.make returns a Signal.t, so it is read with Signal.get like any
-// other signal. It recomputes only when something it read changes, and reading
-// it inside JSX subscribes just that leaf.
+// Computed.make returns a Signal.t, so it drops into JSX like any other signal.
+// It recomputes only when something it read changes, and the leaf holding it is
+// the only thing that re-renders.
 
 @xote.component
 let make = () => {
@@ -52,12 +54,12 @@ let make = () => {
   let fahrenheit = Computed.make(() => Signal.get(celsius) * 9 / 5 + 32)
 
   <div class="counter">
-    <button onClick={_ => Signal.update(celsius, c => c - 5)}> {View.text("-")} </button>
-    <span class="value"> {Signal.get(celsius)} </span>
-    <span> {View.text("C = ")} </span>
-    <span class="value"> {Signal.get(fahrenheit)} </span>
-    <span> {View.text("F")} </span>
-    <button onClick={_ => Signal.update(celsius, c => c + 5)}> {View.text("+")} </button>
+    <button onClick={_ => Signal.update(celsius, c => c - 5)}> {"-"} </button>
+    <span class="value"> {celsius} </span>
+    <span> {"C = "} </span>
+    <span class="value"> {fahrenheit} </span>
+    <span> {"F"} </span>
+    <button onClick={_ => Signal.update(celsius, c => c + 5)}> {"+"} </button>
   </div>
 }
 `,
@@ -68,8 +70,9 @@ let make = () => {
     blurb: 'Side effects and cleanup',
     code: `${HEADER}
 
-// Effect.run re-runs whenever a signal it read changes. Returning Some(fn) is
-// how you undo whatever the last run set up — here, the interval.
+// Effect.run re-runs whenever a signal it read changes — an effect body is
+// ordinary code, so it reads with Signal.get. Returning Some(fn) is how you
+// undo whatever the last run set up: here, the interval.
 
 @xote.component
 let make = () => {
@@ -86,10 +89,8 @@ let make = () => {
   })
 
   <div class="counter">
-    <span class="value"> {Signal.get(ticks)} </span>
-    <button onClick={_ => Signal.update(running, r => !r)}>
-      {View.text("start / stop")}
-    </button>
+    <span class="value"> {ticks} </span>
+    <button onClick={_ => Signal.update(running, r => !r)}> {"start / stop"} </button>
   </div>
 }
 `,
@@ -101,22 +102,22 @@ let make = () => {
     code: `${HEADER}
 
 // Control flow that produces *nodes* is the one place a structural swap is
-// unavoidable, so the ppx wraps it in View.tracked. Attributes and text leaves
-// around it stay fine-grained.
+// unavoidable, so the ppx wraps it in View.tracked. This is also where the
+// explicit Signal.get comes back: the signal is not being rendered, it is
+// choosing which branch renders, so it has to be read. Attributes and text
+// leaves around it stay fine-grained.
 
 @xote.component
 let make = () => {
   let open_ = Signal.make(false)
 
   <div class="counter">
-    <button onClick={_ => Signal.update(open_, o => !o)}>
-      {View.text("toggle")}
-    </button>
+    <button onClick={_ => Signal.update(open_, o => !o)}> {"toggle"} </button>
     <span class="value">
       {if Signal.get(open_) {
-        View.text("open")
+        "open"
       } else {
-        View.text("closed")
+        "closed"
       }}
     </span>
   </div>
@@ -134,8 +135,10 @@ let make = () => {
 // neighbours' DOM nodes untouched, and reversing reuses every <li> rather than
 // rebuilding the list. Without \`by\` the whole list re-renders on every change.
 //
-// \`render\` returns a node, so the ppx decomposes its body like any other JSX
-// and the leaves inside a row stay fine-grained.
+// \`each\` is a typed prop, so it takes MaybeSignal.reactive(items) rather than
+// the bare signal — that wrapper is how a declared prop says which one it is
+// being handed. \`render\` returns a node, so the ppx decomposes its body like
+// any other JSX and the leaves inside a row stay fine-grained.
 
 type item = {id: int, label: string}
 
@@ -159,8 +162,8 @@ let make = () => {
 
   <div class="list">
     <div class="counter">
-      <button onClick={add}> {View.text("add")} </button>
-      <button onClick={reverse}> {View.text("reverse")} </button>
+      <button onClick={add}> {"add"} </button>
+      <button onClick={reverse}> {"reverse"} </button>
       <span class="value"> {Array.length(Signal.get(items))} </span>
     </div>
     <ul class="rows">
@@ -169,8 +172,8 @@ let make = () => {
         by={item => Int.toString(item.id)}
         render={item =>
           <li class="row">
-            <span> {View.text(item.label)} </span>
-            <button onClick={_ => remove(item.id)}> {View.text("remove")} </button>
+            <span> {item.label} </span>
+            <button onClick={_ => remove(item.id)}> {"remove"} </button>
           </li>}
       />
     </ul>
